@@ -38,7 +38,7 @@ bash install.sh
 This installs `lo` to `~/.local/bin/lo`.
 If present, it also installs the man page to `~/.local/share/man/man1/lo.1`.
 
-### Option 2: Remote install (after publishing)
+### Option 2: Remote install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh \
