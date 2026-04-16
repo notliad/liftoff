@@ -4,6 +4,8 @@ set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 BIN_PATH="$INSTALL_DIR/lo"
+MAN_DIR="${MAN_DIR:-$HOME/.local/share/man/man1}"
+MAN_PATH="$MAN_DIR/lo.1"
 
 usage() {
   cat <<'EOF'
@@ -23,6 +25,7 @@ Examples:
 Notes:
   - --from-local copies ./lo from this directory.
   - --from-url downloads <raw-base-url>/lo.
+  - installs man page to ~/.local/share/man/man1/lo.1 when available.
   - default mode installs from local file only.
 EOF
 }
@@ -36,6 +39,44 @@ ensure_path_hint() {
       printf "export PATH=\"%s:\$PATH\"\n" "$INSTALL_DIR"
       ;;
   esac
+
+  if [ -n "${MANPATH:-}" ] && [[ ":$MANPATH:" != *":${HOME}/.local/share/man:"* ]]; then
+    printf "[info] Optional MANPATH entry:\n"
+    printf "export MANPATH=\"$HOME/.local/share/man:\$MANPATH\"\n"
+  fi
+}
+
+refresh_man_db() {
+  if command -v mandb >/dev/null 2>&1; then
+    mandb -q "$HOME/.local/share/man" >/dev/null 2>&1 || true
+  fi
+}
+
+install_man_local() {
+  if [ ! -f "./man/man1/lo.1" ]; then
+    return 1
+  fi
+
+  mkdir -p "$MAN_DIR"
+  cp "./man/man1/lo.1" "$MAN_PATH"
+  printf "Installed man page to %s\n" "$MAN_PATH"
+  refresh_man_db
+  return 0
+}
+
+install_man_url() {
+  local base_url="$1"
+  local man_url="${base_url%/}/man/man1/lo.1"
+
+  mkdir -p "$MAN_DIR"
+  if curl -fsSL "$man_url" -o "$MAN_PATH"; then
+    printf "Installed man page from %s\n" "$man_url"
+    refresh_man_db
+    return 0
+  fi
+
+  printf "[warn] Could not download man page from %s\n" "$man_url" >&2
+  return 1
 }
 
 install_from_local() {
@@ -47,6 +88,7 @@ install_from_local() {
   cp "./lo" "$BIN_PATH"
   chmod +x "$BIN_PATH"
   printf "Installed from local file to %s\n" "$BIN_PATH"
+  install_man_local || true
   return 0
 }
 
@@ -63,12 +105,15 @@ install_from_url() {
   curl -fsSL "$source_url" -o "$BIN_PATH"
   chmod +x "$BIN_PATH"
   printf "Installed from %s to %s\n" "$source_url" "$BIN_PATH"
+  install_man_url "$base_url" || true
   return 0
 }
 
 uninstall() {
   rm -f "$BIN_PATH"
+  rm -f "$MAN_PATH"
   printf "Removed %s\n" "$BIN_PATH"
+  printf "Removed %s\n" "$MAN_PATH"
   printf "To remove config too, run: rm -rf ~/.config/lo\n"
 }
 
@@ -139,3 +184,4 @@ fi
 
 ensure_path_hint
 printf "Run 'lo --help' to get started.\n"
+printf "Run 'man lo' for the manual.\n"

@@ -25,26 +25,27 @@ Examples:
   lo --edit
 
 Notes:
-  - Uses fzf for project selection if available.
+  - Interactive menu is built-in (no fzf required).
+  - Uses fzf with a styled interface when available.
   - Detects script in this order: dev, then start.
   - Detects package manager by lockfile: pnpm, bun, npm.
 EOF
 }
 
 save_projects_dir() {
-  printf "Enter your projects directory (relative to ~):\n"
+  printf "📁 Enter your projects directory (relative to ~):\n"
   printf "~/"
   read -r input_path
 
   PROJECTS_DIR="$HOME/$input_path"
 
   if [ ! -d "$PROJECTS_DIR" ]; then
-    printf "Invalid directory: %s\n" "$PROJECTS_DIR" >&2
+    printf "❌ Invalid directory: %s\n" "$PROJECTS_DIR" >&2
     exit 1
   fi
 
   printf 'PROJECTS_DIR="%s"\n' "$PROJECTS_DIR" > "$CONFIG_FILE"
-  printf "Saved config to %s\n" "$CONFIG_FILE"
+  printf "✅ Saved config to %s\n" "$CONFIG_FILE"
 }
 
 load_config() {
@@ -56,7 +57,7 @@ load_config() {
   source "$CONFIG_FILE"
 
   if [ -z "${PROJECTS_DIR:-}" ] || [ ! -d "$PROJECTS_DIR" ]; then
-    printf "Invalid config. Please choose a valid directory.\n" >&2
+    printf "⚠️ Invalid config. Please choose a valid directory.\n" >&2
     save_projects_dir
 
     # shellcheck disable=SC1090
@@ -72,9 +73,70 @@ require_command() {
   local cmd="$1"
   local hint="$2"
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    printf "Missing dependency: %s. %s\n" "$cmd" "$hint" >&2
+    printf "❌ Missing dependency: %s. %s\n" "$cmd" "$hint" >&2
     exit 1
   fi
+}
+
+show_numbered_menu() {
+  local query="${1:-}"
+  local projects=()
+  local i=1
+  local choice=""
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if [ -z "$query" ] || [[ "${line,,}" == *"${query,,}"* ]]; then
+      projects+=("$line")
+    fi
+  done < <(list_projects)
+
+  if [ "${#projects[@]}" -eq 0 ]; then
+    return 1
+  fi
+
+  printf "\n📚 Select a project:\n"
+  for item in "${projects[@]}"; do
+    printf "  %2d) %s\n" "$i" "$item"
+    i=$((i + 1))
+  done
+
+  printf "\n🔢 Enter number (or empty to cancel): "
+  read -r choice
+  if [ -z "$choice" ]; then
+    return 1
+  fi
+  if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  if [ "$choice" -lt 1 ] || [ "$choice" -gt "${#projects[@]}" ]; then
+    return 1
+  fi
+
+  PROJECT_NAME="${projects[$((choice - 1))]}"
+  return 0
+}
+
+select_project() {
+  local query="${1:-}"
+
+  if command -v fzf >/dev/null 2>&1; then
+    PROJECT_NAME="$(
+      list_projects | fzf \
+        --no-clear \
+        --query="$query" \
+        --height=70% \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="󰍉 Project > " \
+        --header="↵ launch | esc cancel | type to filter" \
+        --info=inline
+    )"
+  else
+    show_numbered_menu "$query" || return 1
+  fi
+
+  [ -n "${PROJECT_NAME:-}" ]
 }
 
 has_script() {
@@ -90,7 +152,7 @@ detect_pm() {
   elif [ -f "package-lock.json" ]; then
     PM="npm"
   else
-    printf "No lockfile found (pnpm-lock.yaml, bun.lock*, package-lock.json).\n" >&2
+    printf "❌ No lockfile found (pnpm-lock.yaml, bun.lock*, package-lock.json).\n" >&2
     exit 1
   fi
 
@@ -109,7 +171,7 @@ run_in_terminal() {
   elif command -v gnome-terminal >/dev/null 2>&1; then
     setsid gnome-terminal -- bash -lc "cd '$PROJECT_PATH' && $cmd" >/dev/null 2>&1 < /dev/null &
   else
-    printf "No supported terminal found, running in current shell...\n"
+    printf "⚠️ No supported terminal found, running in current shell...\n"
     bash -lc "cd '$PROJECT_PATH' && $cmd"
   fi
 }
@@ -140,10 +202,8 @@ require_command "jq" "Install jq to parse package.json scripts."
 PROJECT_NAME="${1:-}"
 
 if [ -z "$PROJECT_NAME" ]; then
-  if command -v fzf >/dev/null 2>&1; then
-    PROJECT_NAME="$(list_projects | fzf)"
-  else
-    usage
+  if ! select_project; then
+    printf "⚠️ No project selected.\n" >&2
     exit 1
   fi
 fi
@@ -151,25 +211,23 @@ fi
 PROJECT_PATH="$PROJECTS_DIR/$PROJECT_NAME"
 
 if [ ! -d "$PROJECT_PATH" ]; then
-  if command -v fzf >/dev/null 2>&1; then
-    printf "Project not found. Select one:\n"
-    PROJECT_NAME="$(list_projects | fzf --query="$PROJECT_NAME")"
+  if select_project "$PROJECT_NAME"; then
     PROJECT_PATH="$PROJECTS_DIR/$PROJECT_NAME"
   else
-    printf "Project not found: %s\n" "$PROJECT_NAME" >&2
+    printf "❌ Project not found: %s\n" "$PROJECT_NAME" >&2
     exit 1
   fi
 fi
 
 if [ ! -d "$PROJECT_PATH" ]; then
-  printf "No project selected.\n" >&2
+  printf "⚠️ No project selected.\n" >&2
   exit 1
 fi
 
 cd "$PROJECT_PATH"
 
 if [ ! -f "package.json" ]; then
-  printf "package.json not found in %s\n" "$PROJECT_PATH" >&2
+  printf "❌ package.json not found in %s\n" "$PROJECT_PATH" >&2
   exit 1
 fi
 
@@ -178,7 +236,7 @@ if has_script "dev"; then
 elif has_script "start"; then
   SCRIPT="start"
 else
-  printf "No dev/start script found in package.json\n" >&2
+  printf "❌ No dev/start script found in package.json\n" >&2
   exit 1
 fi
 
@@ -193,12 +251,12 @@ fi
 INSTALL_CMD="$PM install"
 
 if [ ! -d "node_modules" ]; then
-  printf "Installing dependencies...\n"
+  printf "📦 Installing dependencies...\n"
   if ! $INSTALL_CMD >/dev/null 2>&1; then
-    printf "Dependency installation failed. Run manually: %s\n" "$INSTALL_CMD" >&2
+    printf "❌ Dependency installation failed. Run manually: %s\n" "$INSTALL_CMD" >&2
     exit 1
   fi
 fi
 
-printf "Launching %s with %s (%s)\n" "$PROJECT_NAME" "$PM" "$SCRIPT"
+printf "🚀 Launching %s with %s (%s)\n" "$PROJECT_NAME" "$PM" "$SCRIPT"
 run_in_terminal "$RUN_CMD"

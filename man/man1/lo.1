@@ -1,0 +1,140 @@
+.TH LO 1 "April 2026" "lo 0.1.0" "User Commands"
+.SH NAME
+lo \- launch Node/Bun projects quickly for development
+.SH SYNOPSIS
+.B lo
+.RI [ project-name ]
+.br
+.B lo
+.B --edit
+.br
+.B lo
+.B --print-config
+.br
+.B lo
+.B --help
+.br
+.B lo
+.B --version
+.SH DESCRIPTION
+.B lo
+is a Bash CLI that speeds up daily frontend/backend development workflows.
+It finds your project, detects package manager and script, installs dependencies
+if needed, and launches your dev process in a detached terminal.
+.PP
+When no project name is provided, lo opens an interactive project menu:
+.IP \[bu] 2
+Uses
+.B fzf
+with a styled interface when available.
+.IP \[bu] 2
+Falls back to a numbered menu when fzf is not installed.
+.SH OPTIONS
+.TP
+.B --edit
+Configure the projects root directory and save it to config.
+.TP
+.B --print-config
+Print the configured projects directory.
+.TP
+.B --help
+Show usage help.
+.TP
+.B --version
+Show current version.
+.SH CONFIGURATION
+Config file location:
+.PP
+.B ~/.config/lo/config
+.PP
+Expected format:
+.PP
+.EX
+PROJECTS_DIR="/home/you/Projects"
+.EE
+.SH SCRIPT DETECTION
+Inside the chosen project, lo checks
+.B package.json
+scripts in this order:
+.IP "1." 3
+.B dev
+.IP "2." 3
+.B start
+.PP
+If neither exists, lo exits with an error.
+.SH PACKAGE MANAGER DETECTION
+lo detects package manager by lockfile:
+.IP \[bu] 2
+.B pnpm-lock.yaml
+->
+.B pnpm
+.IP \[bu] 2
+.B bun.lock
+or
+.B bun.lockb
+->
+.B bun
+.IP \[bu] 2
+.B package-lock.json
+->
+.B npm
+.PP
+If no supported lockfile is found, lo exits with an error.
+.SH TERMINAL LAUNCH
+lo tries to launch in this order:
+.IP "1." 3
+.B ghostty
+.IP "2." 3
+.B kitty
+.IP "3." 3
+.B alacritty
+.IP "4." 3
+.B gnome-terminal
+.PP
+If none are available, lo runs in the current shell.
+.SH DEPENDENCIES
+Required:
+.IP \[bu] 2
+.B bash
+.IP \[bu] 2
+.B jq
+.PP
+Optional:
+.IP \[bu] 2
+.B fzf
+(for interactive fuzzy menu)
+.SH EXAMPLES
+Start by exact project name:
+.PP
+.EX
+lo api
+.EE
+.PP
+Open interactive selector:
+.PP
+.EX
+lo
+.EE
+.PP
+Edit config:
+.PP
+.EX
+lo --edit
+.EE
+.SH FILES
+.B ~/.config/lo/config
+.br
+.B ~/.local/bin/lo
+.br
+.B ~/.local/share/man/man1/lo.1
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+General error, invalid config, missing dependency, or canceled selection.
+.SH AUTHOR
+notliad
+.SH LICENSE
+MIT

@@ -6,7 +6,9 @@ It chooses a project, detects the package manager (`pnpm`, `bun`, `npm`), finds 
 
 ## Features
 
-- Interactive project selection with `fzf` (optional but recommended)
+- Interactive project selection (`lo` with no args)
+- Styled `fzf` interface when available (keeps context with header, border and prompt)
+- Numbered fallback menu when `fzf` is not installed
 - Project fuzzy matching
 - Detects script in this order: `dev`, then `start`
 - Detects package manager by lockfile:
@@ -34,6 +36,7 @@ bash install.sh
 ```
 
 This installs `lo` to `~/.local/bin/lo`.
+If present, it also installs the man page to `~/.local/share/man/man1/lo.1`.
 
 ### Option 2: Remote install (after publishing)
 
@@ -50,6 +53,7 @@ lo --edit
 lo --print-config
 lo --help
 lo --version
+man lo
 ```
 
 ### First run
@@ -94,6 +98,7 @@ Run checks:
 ```bash
 bash -n lo
 bash -n install.sh
+man ./man/man1/lo.1
 ```
 
 ## License
