@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+VERSION="0.1.0"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lo"
+CONFIG_FILE="$CONFIG_DIR/config"
+
+mkdir -p "$CONFIG_DIR"
+
+usage() {
+  cat <<'EOF'
+lo - launch Node/Bun projects quickly
+
+Usage:
+  lo [project-name]
+  lo --edit
+  lo --print-config
+  lo --version
+  lo --help
+
+Examples:
+  lo api
+  lo web-dashboard
+  lo --edit
+
+Notes:
+  - Uses fzf for project selection if available.
+  - Detects script in this order: dev, then start.
+  - Detects package manager by lockfile: pnpm, bun, npm.
+EOF
+}
+
+save_projects_dir() {
+  printf "Enter your projects directory (relative to ~):\n"
+  printf "~/"
+  read -r input_path
+
+  PROJECTS_DIR="$HOME/$input_path"
+
+  if [ ! -d "$PROJECTS_DIR" ]; then
+    printf "Invalid directory: %s\n" "$PROJECTS_DIR" >&2
+    exit 1
+  fi
+
+  printf 'PROJECTS_DIR="%s"\n' "$PROJECTS_DIR" > "$CONFIG_FILE"
+  printf "Saved config to %s\n" "$CONFIG_FILE"
+}
+
+load_config() {
+  if [ ! -f "$CONFIG_FILE" ]; then
+    save_projects_dir
+  fi
+
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+
+  if [ -z "${PROJECTS_DIR:-}" ] || [ ! -d "$PROJECTS_DIR" ]; then
+    printf "Invalid config. Please choose a valid directory.\n" >&2
+    save_projects_dir
+
+    # shellcheck disable=SC1090
+    source "$CONFIG_FILE"
+  fi
+}
+
+list_projects() {
+  find "$PROJECTS_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort
+}
+
+require_command() {
+  local cmd="$1"
+  local hint="$2"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    printf "Missing dependency: %s. %s\n" "$cmd" "$hint" >&2
+    exit 1
+  fi
+}
+
+has_script() {
+  local script_name="$1"
+  jq -e --arg script "$script_name" '.scripts[$script] != null' package.json >/dev/null 2>&1
+}
+
+detect_pm() {
+  if [ -f "pnpm-lock.yaml" ]; then
+    PM="pnpm"
+  elif [ -f "bun.lockb" ] || [ -f "bun.lock" ]; then
+    PM="bun"
+  elif [ -f "package-lock.json" ]; then
+    PM="npm"
+  else
+    printf "No lockfile found (pnpm-lock.yaml, bun.lock*, package-lock.json).\n" >&2
+    exit 1
+  fi
+
+  require_command "$PM" "Install it and run again."
+}
+
+run_in_terminal() {
+  local cmd="$1"
+
+  if command -v ghostty >/dev/null 2>&1; then
+    setsid ghostty -e bash -lc "cd '$PROJECT_PATH' && $cmd" >/dev/null 2>&1 < /dev/null &
+  elif command -v kitty >/dev/null 2>&1; then
+    setsid kitty bash -lc "cd '$PROJECT_PATH' && $cmd" >/dev/null 2>&1 < /dev/null &
+  elif command -v alacritty >/dev/null 2>&1; then
+    setsid alacritty -e bash -lc "cd '$PROJECT_PATH' && $cmd" >/dev/null 2>&1 < /dev/null &
+  elif command -v gnome-terminal >/dev/null 2>&1; then
+    setsid gnome-terminal -- bash -lc "cd '$PROJECT_PATH' && $cmd" >/dev/null 2>&1 < /dev/null &
+  else
+    printf "No supported terminal found, running in current shell...\n"
+    bash -lc "cd '$PROJECT_PATH' && $cmd"
+  fi
+}
+
+case "${1:-}" in
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  --version|-v)
+    printf "lo %s\n" "$VERSION"
+    exit 0
+    ;;
+  --edit)
+    save_projects_dir
+    exit 0
+    ;;
+  --print-config)
+    load_config
+    printf "PROJECTS_DIR=%s\n" "$PROJECTS_DIR"
+    exit 0
+    ;;
+esac
+
+load_config
+require_command "jq" "Install jq to parse package.json scripts."
+
+PROJECT_NAME="${1:-}"
+
+if [ -z "$PROJECT_NAME" ]; then
+  if command -v fzf >/dev/null 2>&1; then
+    PROJECT_NAME="$(list_projects | fzf)"
+  else
+    usage
+    exit 1
+  fi
+fi
+
+PROJECT_PATH="$PROJECTS_DIR/$PROJECT_NAME"
+
+if [ ! -d "$PROJECT_PATH" ]; then
+  if command -v fzf >/dev/null 2>&1; then
+    printf "Project not found. Select one:\n"
+    PROJECT_NAME="$(list_projects | fzf --query="$PROJECT_NAME")"
+    PROJECT_PATH="$PROJECTS_DIR/$PROJECT_NAME"
+  else
+    printf "Project not found: %s\n" "$PROJECT_NAME" >&2
+    exit 1
+  fi
+fi
+
+if [ ! -d "$PROJECT_PATH" ]; then
+  printf "No project selected.\n" >&2
+  exit 1
+fi
+
+cd "$PROJECT_PATH"
+
+if [ ! -f "package.json" ]; then
+  printf "package.json not found in %s\n" "$PROJECT_PATH" >&2
+  exit 1
+fi
+
+if has_script "dev"; then
+  SCRIPT="dev"
+elif has_script "start"; then
+  SCRIPT="start"
+else
+  printf "No dev/start script found in package.json\n" >&2
+  exit 1
+fi
+
+detect_pm
+
+if [ "$PM" = "npm" ]; then
+  RUN_CMD="npm run $SCRIPT"
+else
+  RUN_CMD="$PM $SCRIPT"
+fi
+
+INSTALL_CMD="$PM install"
+
+if [ ! -d "node_modules" ]; then
+  printf "Installing dependencies...\n"
+  if ! $INSTALL_CMD >/dev/null 2>&1; then
+    printf "Dependency installation failed. Run manually: %s\n" "$INSTALL_CMD" >&2
+    exit 1
+  fi
+fi
+
+printf "Launching %s with %s (%s)\n" "$PROJECT_NAME" "$PM" "$SCRIPT"
+run_in_terminal "$RUN_CMD"

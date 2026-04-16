@@ -1,0 +1,12 @@
+# Local editor/system files
+.DS_Store
+*.swp
+*.swo
+
+# Temporary
+*.tmp
+*.log
+
+# Local build artifacts (if any)
+dist/
+build/
