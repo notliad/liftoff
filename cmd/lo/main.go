@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"text/tabwriter"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -561,6 +562,8 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 	padModeShort := fs.Bool("p", false, "launchpad mode")
 	listMode := fs.Bool("list", false, "list mode")
 	listModeShort := fs.Bool("l", false, "list mode")
+	watchMode := fs.Bool("watch", false, "watch mode")
+	watchModeShort := fs.Bool("w", false, "watch mode")
 
 	if err := fs.Parse(args); err != nil {
 		writeUsage(errOut)
@@ -580,6 +583,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 	isPrintConfig := *printConfig || *printConfigShort
 	isPadMode := *padMode || *padModeShort
 	isListMode := *listMode || *listModeShort
+	isWatchMode := *watchMode || *watchModeShort
 
 	cfgPath, legacyPath, err := configPaths()
 	if err != nil {
@@ -655,7 +659,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		if padName == "" {
 			return errors.New("❌ launchpad name required: lo --pad <name>")
 		}
-		return runLaunchpadFlow(cfgPath, &cfg, projectEntries, padName, in, out, errOut)
+		return runLaunchpadFlow(cfgPath, &cfg, projectEntries, padName, isWatchMode, in, out, errOut)
 	}
 
 	if isListMode {
@@ -680,7 +684,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	return launchProject(project.Path, project.Name, out, errOut)
+	return launchProject(project.Path, project.Name, isWatchMode, in, out, errOut)
 }
 
 func writeUsage(w io.Writer) {
@@ -696,7 +700,8 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(tw, "  lo --pad --edit [name]\tedit a launchpad")
 	fmt.Fprintln(tw, "")
 	fmt.Fprintln(tw, "  lo --edit, -e\tchange projects directories")
-	fmt.Fprintln(tw, "  lo --print-config, -c\t display current directories")
+	fmt.Fprintln(tw, "  lo --watch, -w\trun in watch mode and monitors project resources")
+	fmt.Fprintln(tw, "  lo --print-config, -c\tdisplay current directories")
 	fmt.Fprintln(tw, "  lo --version, -v\tdisplay version")
 	fmt.Fprintln(tw, "  lo --help, -h\tshow this :)")
 	fmt.Fprintln(tw, "")
@@ -1202,7 +1207,7 @@ func selectWithLineMenu(projects []string, initialQuery string, in io.Reader, ou
 	}
 }
 
-func runLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name string, in io.Reader, out io.Writer, errOut io.Writer) error {
+func runLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name string, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer) error {
 	if cfg.Launchpads == nil {
 		cfg.Launchpads = make(map[string][]string)
 	}
@@ -1230,6 +1235,10 @@ func runLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name 
 	resolvedProjects := resolveLaunchpadProjects(selectedProjects, entries)
 	if len(resolvedProjects) == 0 {
 		return fmt.Errorf("⚠️ launchpad '%s' has no resolvable projects", name)
+	}
+
+	if watchMode {
+		return launchProjectsWatchMode(name, resolvedProjects, in, out, errOut)
 	}
 
 	return launchProjectsParallel(name, resolvedProjects, out, errOut)
@@ -1464,7 +1473,7 @@ func launchProjectsParallel(launchpadName string, projects []projectEntry, out i
 				mu.Unlock()
 				return
 			}
-			if err := launchProject(project.Path, project.Name, out, errOut); err != nil {
+			if err := launchProject(project.Path, project.Name, false, os.Stdin, out, errOut); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("%s: %w", project.Display, err))
 				mu.Unlock()
@@ -1479,7 +1488,7 @@ func launchProjectsParallel(launchpadName string, projects []projectEntry, out i
 	return fmt.Errorf("❌ launchpad completed with %d errors (first: %v)", len(errs), errs[0])
 }
 
-func launchProject(projectPath, projectName string, out io.Writer, errOut io.Writer) error {
+func launchProject(projectPath, projectName string, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer) error {
 	target, installCmd, runCmd, err := detectProjectRunner(projectPath)
 	if err != nil {
 		return err
@@ -1493,10 +1502,455 @@ func launchProject(projectPath, projectName string, out io.Writer, errOut io.Wri
 	}
 
 	fmt.Fprintf(out, "🚀 Launching %s with %s\n", projectName, target)
+	if watchMode {
+		return launchWithWatch(projectPath, projectName, runCmd, in, out, errOut)
+	}
 	if err := launchCrossPlatform(projectPath, runCmd, out, errOut); err != nil {
 		return err
 	}
 	return nil
+}
+
+type processTreeStats struct {
+	ProcessCount  int
+	CPUPercent    float64
+	CPUPercentRaw float64
+	CPUCoresUsed  float64
+	RSSKB         int
+}
+
+type processSample struct {
+	PID        int
+	ParentPID  int
+	CPUPercent float64
+	RSSKB      int
+}
+
+type watchTickMsg struct{}
+
+type watchTarget struct {
+	ProjectName string
+	Terminal    string
+	RootPID     int
+	StartedAt   time.Time
+
+	Stats       processTreeStats
+	LastUpdated time.Time
+	LastErr     string
+	Done        bool
+	StatusText  string
+}
+
+type watchDashboardModel struct {
+	title     string
+	startedAt time.Time
+	targets   []watchTarget
+	allDone   bool
+}
+
+func newWatchDashboardModel(title string, targets []watchTarget) *watchDashboardModel {
+	return &watchDashboardModel{
+		title:     title,
+		startedAt: time.Now(),
+		targets:   targets,
+	}
+}
+
+func watchTick() tea.Cmd {
+	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+		return watchTickMsg{}
+	})
+}
+
+func (m *watchDashboardModel) Init() tea.Cmd {
+	return watchTick()
+}
+
+func (m *watchDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			m.allDone = true
+			return m, tea.Quit
+		}
+	case watchTickMsg:
+		allDone := true
+		now := time.Now()
+		for i := range m.targets {
+			t := &m.targets[i]
+			if t.Done {
+				continue
+			}
+
+			stats, err := collectProcessTreeStats(t.RootPID)
+			if err != nil {
+				t.LastErr = err.Error()
+				t.LastUpdated = now
+				t.StatusText = "stats error"
+				allDone = false
+				continue
+			}
+
+			if stats.ProcessCount == 0 {
+				t.Done = true
+				t.LastUpdated = now
+				t.StatusText = "finished"
+				continue
+			}
+
+			t.Stats = stats
+			t.LastErr = ""
+			t.LastUpdated = now
+			t.StatusText = "running"
+			allDone = false
+		}
+
+		if allDone {
+			m.allDone = true
+			return m, tea.Quit
+		}
+		return m, watchTick()
+	}
+
+	return m, nil
+}
+
+func (m *watchDashboardModel) View() string {
+	uptime := time.Since(m.startedAt).Round(time.Second)
+
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("👀 lo is watching"))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(m.title))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("Uptime: %s", uptime)))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("Project                  PID    Procs  CPU%     Cores    Mem(MB)   Status      Terminal"))
+	b.WriteString("\n")
+
+	for _, t := range m.targets {
+		memMB := float64(t.Stats.RSSKB) / 1024.0
+		cpu := t.Stats.CPUPercent
+		cores := t.Stats.CPUCoresUsed
+		status := t.StatusText
+		if status == "" {
+			status = "initializing"
+		}
+		line := fmt.Sprintf("%-24s %-6d %-6d %-8.1f %-8.2f %-9.1f %-11s %s",
+			truncateRunes(t.ProjectName, 24),
+			t.RootPID,
+			t.Stats.ProcessCount,
+			cpu,
+			cores,
+			memMB,
+			status,
+			t.Terminal,
+		)
+		if t.LastErr != "" {
+			line += "  !"
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	if m.allDone {
+		b.WriteString(successStyle.Render("Status: all watched processes finished"))
+	} else {
+		b.WriteString(successStyle.Render("Status: monitoring"))
+	}
+	b.WriteString("\n")
+
+	for _, t := range m.targets {
+		if t.LastErr != "" {
+			b.WriteString(warnStyle.Render(fmt.Sprintf("Warning [%s]: %s", t.ProjectName, t.LastErr)))
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render("Press q/esc to stop monitoring (projects keep running)"))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func truncateRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	if max <= 3 {
+		return string(r[:max])
+	}
+	return string(r[:max-3]) + "..."
+}
+
+func launchWithWatch(projectPath, projectName string, runCmd []string, in io.Reader, out io.Writer, errOut io.Writer) error {
+	if len(runCmd) == 0 {
+		return errors.New("empty command")
+	}
+	if !hasCommand("ps") {
+		return errors.New("❌ watch mode requires 'ps' command")
+	}
+
+	pid, terminalName, err := startWatchTerminal(projectPath, runCmd)
+	if err != nil {
+		return err
+	}
+
+	inFile, inOk := in.(*os.File)
+	outFile, outOk := out.(*os.File)
+	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
+		return errors.New("❌ watch mode requires an interactive terminal")
+	}
+
+	target := watchTarget{
+		ProjectName: projectName,
+		Terminal:    terminalName,
+		RootPID:     pid,
+		StartedAt:   time.Now(),
+		StatusText:  "initializing",
+	}
+
+	model := newWatchDashboardModel(
+		fmt.Sprintf("Project: %s", projectName),
+		[]watchTarget{target},
+	)
+	p := tea.NewProgram(
+		model,
+		tea.WithInput(inFile),
+		tea.WithOutput(outFile),
+		tea.WithAltScreen(),
+	)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(errOut, "⚠️ watch UI exited with error: %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in io.Reader, out io.Writer, errOut io.Writer) error {
+	if len(projects) == 0 {
+		return errors.New("⚠️ launchpad has no projects")
+	}
+
+	fmt.Fprintf(out, "👀 Watch mode for launchpad '%s' (%d projects)\n", launchpadName, len(projects))
+
+	targets := make([]watchTarget, 0, len(projects))
+	startupErrors := make([]string, 0)
+
+	for _, project := range projects {
+		target, installCmd, runCmd, err := detectProjectRunner(project.Path)
+		if err != nil {
+			startupErrors = append(startupErrors, fmt.Sprintf("%s: %v", project.Name, err))
+			continue
+		}
+
+		if len(installCmd) > 0 {
+			fmt.Fprintf(out, "📦 Installing dependencies for %s...\n", project.Name)
+			if err := runCommandInDir(project.Path, installCmd, out, errOut); err != nil {
+				startupErrors = append(startupErrors, fmt.Sprintf("%s: install failed (%v)", project.Name, err))
+				continue
+			}
+		}
+
+		fmt.Fprintf(out, "🚀 Launching %s with %s\n", project.Name, target)
+		pid, terminalName, err := startWatchTerminal(project.Path, runCmd)
+		if err != nil {
+			startupErrors = append(startupErrors, fmt.Sprintf("%s: %v", project.Name, err))
+			continue
+		}
+
+		targets = append(targets, watchTarget{
+			ProjectName: project.Name,
+			Terminal:    terminalName,
+			RootPID:     pid,
+			StartedAt:   time.Now(),
+			StatusText:  "initializing",
+		})
+	}
+
+	if len(targets) == 0 {
+		if len(startupErrors) == 0 {
+			return errors.New("❌ no project could be launched in watch mode")
+		}
+		return fmt.Errorf("❌ failed to start watch mode (first error: %s)", startupErrors[0])
+	}
+
+	for _, msg := range startupErrors {
+		fmt.Fprintf(errOut, "⚠️ %s\n", msg)
+	}
+
+	inFile, inOk := in.(*os.File)
+	outFile, outOk := out.(*os.File)
+	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
+		return errors.New("❌ watch mode requires an interactive terminal")
+	}
+
+	model := newWatchDashboardModel(
+		fmt.Sprintf("Launchpad: %s", launchpadName),
+		targets,
+	)
+	p := tea.NewProgram(
+		model,
+		tea.WithInput(inFile),
+		tea.WithOutput(outFile),
+		tea.WithAltScreen(),
+	)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(errOut, "⚠️ watch UI exited with error: %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+func startWatchTerminal(projectPath string, runCmd []string) (int, string, error) {
+	if runtime.GOOS != "linux" {
+		return 0, "", fmt.Errorf("❌ --watch with external terminal is currently supported on Linux only")
+	}
+
+	shellLine := fmt.Sprintf("cd %s && %s", shellQuote(projectPath), shellJoin(runCmd))
+	terminals := []struct {
+		name string
+		args []string
+	}{
+		{name: "ghostty", args: []string{"-e", "bash", "-lc", shellLine}},
+		{name: "kitty", args: []string{"bash", "-lc", shellLine}},
+		{name: "alacritty", args: []string{"-e", "bash", "-lc", shellLine}},
+		{name: "gnome-terminal", args: []string{"--", "bash", "-lc", shellLine}},
+	}
+
+	for _, termDef := range terminals {
+		if !hasCommand(termDef.name) {
+			continue
+		}
+		cmd := exec.Command(termDef.name, termDef.args...)
+		if err := cmd.Start(); err != nil {
+			continue
+		}
+		if cmd.Process == nil {
+			continue
+		}
+		return cmd.Process.Pid, termDef.name, nil
+	}
+
+	return 0, "", errors.New("❌ watch mode could not open a terminal (tried: ghostty, kitty, alacritty, gnome-terminal)")
+}
+
+func collectProcessTreeStats(rootPID int) (processTreeStats, error) {
+	samples, err := readProcessSamples()
+	if err != nil {
+		return processTreeStats{}, err
+	}
+
+	childrenByParent := make(map[int][]int, len(samples))
+	sampleByPID := make(map[int]processSample, len(samples))
+	for _, sample := range samples {
+		sampleByPID[sample.PID] = sample
+		childrenByParent[sample.ParentPID] = append(childrenByParent[sample.ParentPID], sample.PID)
+	}
+
+	if _, ok := sampleByPID[rootPID]; !ok {
+		return processTreeStats{}, nil
+	}
+
+	queue := []int{rootPID}
+	visited := make(map[int]bool)
+	var totalCPU float64
+	var totalRSS int
+	count := 0
+
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		if visited[pid] {
+			continue
+		}
+		visited[pid] = true
+
+		sample, ok := sampleByPID[pid]
+		if !ok {
+			continue
+		}
+		count++
+		totalCPU += sample.CPUPercent
+		totalRSS += sample.RSSKB
+
+		queue = append(queue, childrenByParent[pid]...)
+	}
+
+	return processTreeStats{
+		ProcessCount:  count,
+		CPUPercent:    normalizeCPUPercent(totalCPU),
+		CPUPercentRaw: totalCPU,
+		CPUCoresUsed:  totalCPU / 100.0,
+		RSSKB:         totalRSS,
+	}, nil
+}
+
+func normalizeCPUPercent(rawCPU float64) float64 {
+	cores := float64(runtime.NumCPU())
+	if cores <= 0 {
+		cores = 1
+	}
+	normalized := rawCPU / cores
+	if normalized < 0 {
+		return 0
+	}
+	if normalized > 100 {
+		return 100
+	}
+	return normalized
+}
+
+func readProcessSamples() ([]processSample, error) {
+	out, err := exec.Command("ps", "-eo", "pid=,ppid=,%cpu=,rss=").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	samples := make([]processSample, 0, len(lines))
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		cpu, err := strconv.ParseFloat(fields[2], 64)
+		if err != nil {
+			continue
+		}
+		rssKB, err := strconv.Atoi(fields[3])
+		if err != nil {
+			continue
+		}
+
+		samples = append(samples, processSample{
+			PID:        pid,
+			ParentPID:  ppid,
+			CPUPercent: cpu,
+			RSSKB:      rssKB,
+		})
+	}
+
+	return samples, nil
 }
 
 func filterProjects(projects []string, filter string) []string {

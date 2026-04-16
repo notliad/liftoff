@@ -10,6 +10,7 @@ It can:
 * detect the runtime and package manager automatically
 * install dependencies when needed
 * start the project in a detached terminal
+* watch mode: monitor your projects resources while its running
 
 You stay in flow. ⚡
 
@@ -112,10 +113,18 @@ lo --pad, -p [name]    # run a launchpad
 lo --pad --list [name] # list your launchpads
 lo --pad --edit [name] # edit your launchpads
 lo --edit, -e          # edit your directories
+lo --watch, -w         # run project in another terminal and monitor stats here
 lo --print-config      # display current directories
 lo --help              # i need somebody :)
 lo --version           # display version
 ```
+
+### Watch mode
+
+* `lo --watch` (`-w`): launches the selected project in another terminal window
+* Shows Bubble Tea live stats in the terminal where `lo` was executed
+* Stats refresh every 2s for process tree (root + child processes): CPU and memory (RSS)
+* Current limitation: `--watch` is only available for single project launch (not `--pad`)
 
 ### Launchpad
 
