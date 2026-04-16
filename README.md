@@ -1,29 +1,85 @@
-# 🚀 liftoff
+# 🚀 lo (Liftoff)
 
-`lo` is a small Bash CLI to quickly launch Node/Bun projects in development mode.
+**lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI designed to remove friction from your development workflow.
 
-It chooses a project, detects the package manager (`pnpm`, `bun`, `npm`), finds a runnable script (`dev` or `start`), installs dependencies if needed, and starts the project in a detached terminal.
+Instead of manually navigating folders, installing dependencies, and starting projects one by one, **lo** lets you launch everything from a single command — instantly.
+
+It can:
+
+* interactively pick a project from your workspace
+* detect the runtime and package manager automatically
+* install dependencies when needed
+* start the project in a detached terminal
+
+You stay in flow. ⚡
+
+---
 
 ## Features
 
-- Interactive project selection (`lo` with no args)
-- Styled `fzf` interface when available (keeps context with header, border and prompt)
-- Numbered fallback menu when `fzf` is not installed
-- Project fuzzy matching
-- Detects script in this order: `dev`, then `start`
-- Detects package manager by lockfile:
-  - `pnpm-lock.yaml` -> `pnpm`
-  - `bun.lock*` -> `bun`
-  - `package-lock.json` -> `npm`
-- Installs dependencies automatically when `node_modules` is missing
-- Opens the app in a detached terminal when possible
+* Launch any project from your workspace with a single command
+* Zero-config runtime detection (Node, Rust, Python, Go, Java)
+* Automatic dependency installation
+* Interactive project picker
+* **Launchpads**: group multiple projects and start them together
+* Cross-platform: Linux, macOS, Windows
+
+---
+
+## What is a Launchpad?
+
+A **launchpad** is a named group of projects that you can start at once.
+
+Perfect for full-stack environments, microservices, or any setup where multiple services need to run together.
+
+```bash
+lo --pad backend-stack
+```
+
+---
+
+## Supported Languages & Frameworks
+
+### Node.js / JavaScript / TypeScript
+
+* Detects `package.json` with `dev` or `start` scripts
+* Automatically selects package manager via lockfile: `pnpm`, `bun`, `npm`, `yarn`
+* Framework hints:
+  Next.js, Nuxt, SvelteKit, Astro, NestJS, Remix, Vite, React, Vue, Angular, Express, Fastify, Hono
+
+### Rust
+
+* Detects `Cargo.toml`
+* Runs with `cargo run`
+* Framework hints:
+  Axum, Actix, Rocket, Tauri, Bevy
+
+### Python
+
+* Detects `pyproject.toml`, `requirements.txt`, `setup.py`
+* Parses `pyproject.toml` for smarter detection
+* Execution strategy: `uv`, `poetry`, or `python` (`py` on Windows)
+* Framework hints:
+  FastAPI, Flask, Django, Streamlit, Gradio
+
+### Java
+
+* Detects `pom.xml`, `build.gradle`, `build.gradle.kts`
+* Maven: `spring-boot:run` or `exec:java`
+* Gradle: `bootRun`, `run`, or `build`
+* Framework hints:
+  Spring, Quarkus, Micronaut
+
+### Go
+
+* Detects `go.mod`
+* Runs with `go run .` or `go run ./cmd/<name>`
+* Framework hints:
+  Gin, Fiber, Echo, Chi, Temporal
 
 ## Requirements
 
-- Bash (Linux)
-- `jq` (required)
-- One package manager installed: `pnpm`, `bun`, or `npm`
-- Optional: `fzf` for interactive selection
+* Go (`1.25+`) for build/install from source
 
 ## Installation
 
@@ -35,37 +91,64 @@ From this repository root:
 bash install.sh
 ```
 
-This installs `lo` to `~/.local/bin/lo`.
+This builds `./cmd/lo` and installs `lo` to `~/.local/bin/lo`.
 If present, it also installs the man page to `~/.local/share/man/man1/lo.1`.
 
 ### Option 2: Remote install (after publishing)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh \
-  | bash -s -- --from-url https://raw.githubusercontent.com/notliad/liftoff/main
+  | bash -s -- \
+      --from-module github.com/notliad/liftoff/cmd/lo@latest \
+      --man-from-url https://raw.githubusercontent.com/notliad/liftoff/main
 ```
 
 ## Usage
 
 ```bash
-lo [project-name]
-lo --edit
-lo --print-config
-lo --help
-lo --version
-man lo
+lo [project-name]      # run a project
+lo --list, -l          # list projects
+lo --pad, -p [name]    # run a launchpad
+lo --pad --list [name] # list your launchpads
+lo --pad --edit [name] # edit your launchpads
+lo --edit, -e          # edit your directories
+lo --print-config      # display current directories
+lo --help              # i need somebody :)
+lo --version           # display version
 ```
+
+### Launchpad
+
+* `lo --pad my-work`: runs launchpad `my-work`; if missing, opens a checklist to create it
+* When a launchpad is created, projects are not started automatically
+* `lo --pad --edit my-work`: edits projects in launchpad `my-work`
+* `lo --pad --edit`: first choose an existing launchpad, then edit it
+* `lo --pad --list` (`-p -l`): lists launchpads
+* `lo --pad --list my-work`: shows projects from launchpad `my-work`
+* `lo --list` (`-l`): lists projects across all configured directories
 
 ### First run
 
-On first run, `lo` asks for your projects directory and saves it to:
+On first run, `lo` asks for your projects directories (comma-separated) and saves them to:
 
-- `~/.config/lo/config`
+* `~/.config/lo/config.json`
 
 Example value:
 
-```bash
-PROJECTS_DIR="/home/you/Projects"
+```json
+{
+  "projectsDir": "/home/you/Projects",
+  "projectsDirs": [
+    "/home/you/Projects",
+    "/home/you/Work"
+  ],
+  "launchpads": {
+    "my-work": [
+      "api",
+      "web"
+    ]
+  }
+}
 ```
 
 ## Recommended shell setup
@@ -96,8 +179,9 @@ rm -rf ~/.config/lo
 Run checks:
 
 ```bash
-bash -n lo
 bash -n install.sh
+go test ./...
+go build ./cmd/lo
 man ./man/man1/lo.1
 ```
 
