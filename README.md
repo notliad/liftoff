@@ -119,23 +119,6 @@ lo --help              # i need somebody :)
 lo --version           # display version
 ```
 
-### Watch mode
-
-* `lo --watch` (`-w`): launches the selected project in another terminal window
-* Shows Bubble Tea live stats in the terminal where `lo` was executed
-* Stats refresh every 2s for process tree (root + child processes): CPU and memory (RSS)
-* Current limitation: `--watch` is only available for single project launch (not `--pad`)
-
-### Launchpad
-
-* `lo --pad my-work`: runs launchpad `my-work`; if missing, opens a checklist to create it
-* When a launchpad is created, projects are not started automatically
-* `lo --pad --edit my-work`: edits projects in launchpad `my-work`
-* `lo --pad --edit`: first choose an existing launchpad, then edit it
-* `lo --pad --list` (`-p -l`): lists launchpads
-* `lo --pad --list my-work`: shows projects from launchpad `my-work`
-* `lo --list` (`-l`): lists projects across all configured directories
-
 ### First run
 
 On first run, `lo` asks for your projects directories (comma-separated) and saves them to:
