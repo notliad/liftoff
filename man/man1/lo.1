@@ -1,9 +1,26 @@
-.TH LO 1 "April 2026" "lo 0.1.0" "User Commands"
+.TH LO 1 "April 2026" "lo 0.3.0" "User Commands"
 .SH NAME
-lo \- launch Node/Bun projects quickly for development
+lo \- launch Node/Bun/Rust/Python/Java/Go projects quickly for development
 .SH SYNOPSIS
 .B lo
 .RI [ project-name ]
+.br
+.B lo
+.B --list
+.br
+.B lo
+.B --pad
+.RI [ name ]
+.br
+.B lo
+.B --pad
+.B --list
+.RI [ name ]
+.br
+.B lo
+.B --pad
+.B --edit
+.RI [ name ]
 .br
 .B lo
 .B --edit
@@ -18,42 +35,109 @@ lo \- launch Node/Bun projects quickly for development
 .B --version
 .SH DESCRIPTION
 .B lo
-is a Bash CLI that speeds up daily frontend/backend development workflows.
+is a Go CLI that speeds up daily frontend/backend development workflows.
 It finds your project, detects package manager and script, installs dependencies
 if needed, and launches your dev process in a detached terminal.
 .PP
-When no project name is provided, lo opens an interactive project menu:
+When no project name is provided, lo opens a Bubble Tea interactive project list:
 .IP \[bu] 2
-Uses
-.B fzf
-with a styled interface when available.
+Type to filter in real time.
 .IP \[bu] 2
-Falls back to a numbered menu when fzf is not installed.
+Use arrow keys (or j/k) to move selection.
+.IP \[bu] 2
+Press Enter to launch and Esc to cancel.
+.IP \[bu] 2
+Preview stack is shown for each project (Node/Rust/Python/Java/Go framework hints).
+.PP
+Configuration prompt (first run and
+.B --edit )
+also uses Bubble Tea when terminal UI is available.
 .SH OPTIONS
 .TP
 .B --edit
-Configure the projects root directory and save it to config.
+Configure one or more projects root directories (comma-separated) and save them to config.
+.br
+Short alias:
+.B -e
 .TP
 .B --print-config
-Print the configured projects directory.
+Print configured projects directories.
+.br
+Short alias:
+.B -c
+.TP
+.B --pad
+Launchpad mode. Runs an existing launchpad or creates one if missing.
+.br
+Short alias:
+.B -p
+.TP
+.B --list
+List mode. Without --pad, lists projects. With --pad, lists launchpads.
+.br
+Short alias:
+.B -l
 .TP
 .B --help
 Show usage help.
+.br
+Short alias:
+.B -h
 .TP
 .B --version
 Show current version.
+.br
+Short alias:
+.B -v
+.SH LAUNCHPADS
+Launchpads allow starting multiple projects in parallel.
+.IP \[bu] 2
+.B lo --pad <name>
+run launchpad
+.I name
+or create it through a project checklist if it does not exist.
+.br
+When newly created, it is saved but not started automatically.
+.IP \[bu] 2
+.B lo --pad --edit [name]
+edit projects associated with a launchpad.
+.IP \[bu] 2
+.B lo --pad --list [name]
+list launchpads, or show projects for one launchpad.
+.PP
+Launchpads are stored in the same config file:
+.B ~/.config/lo/config.json
+.SH GO SUPPORT
+If
+.B go.mod
+is found, lo runs Go projects with:
+.PP
+.EX
+go run .
+.EE
+or
+.PP
+.EX
+go run ./cmd/<name>
+.EE
+when a main entrypoint is detected under
+.B ./cmd .
 .SH CONFIGURATION
 Config file location:
 .PP
-.B ~/.config/lo/config
+.B ~/.config/lo/config.json
 .PP
 Expected format:
 .PP
 .EX
-PROJECTS_DIR="/home/you/Projects"
+{
+	"projectsDir": "/home/you/Projects",
+	"projectsDirs": ["/home/you/Projects", "/home/you/Work"],
+	"launchpads": {"my-work": ["api", "web"]}
+}
 .EE
 .SH SCRIPT DETECTION
-Inside the chosen project, lo checks
+For Node/Bun/Yarn/NPM projects, lo checks
 .B package.json
 scripts in this order:
 .IP "1." 3
@@ -62,8 +146,71 @@ scripts in this order:
 .B start
 .PP
 If neither exists, lo exits with an error.
+.SH RUST SUPPORT
+If
+.B Cargo.toml
+is found, lo uses:
+.PP
+.EX
+cargo run
+.EE
+.SH PYTHON SUPPORT
+If a Python project is detected (for example by
+.B pyproject.toml ,
+.B requirements.txt ,
+.B setup.py
+or common entrypoints), lo uses one of these strategies:
+.IP \[bu] 2
+framework detection is improved by parsing
+.B pyproject.toml
+dependency tables.
+.IP \[bu] 2
+.B uv
+when
+.B uv.lock
+exists:
+.B uv sync
+and
+.B uv run python ...
+.IP \[bu] 2
+.B poetry
+when
+.B poetry.lock
+exists:
+.B poetry install
+and
+.B poetry run python ...
+.IP \[bu] 2
+fallback:
+.B python3
+/
+.B python
+(or
+.B py
+on Windows).
+.SH JAVA SUPPORT
+If a Java project is detected (by
+.B pom.xml ,
+.B build.gradle
+or
+.B build.gradle.kts ),
+lo uses one of these strategies:
+.IP \[bu] 2
+Maven projects:
+.B spring-boot:run
+for Spring, otherwise
+.B exec:java
+fallback.
+.IP \[bu] 2
+Gradle projects:
+.B bootRun
+for Spring, otherwise
+.B run
+(application plugin) or
+.B build
+fallback.
 .SH PACKAGE MANAGER DETECTION
-lo detects package manager by lockfile:
+For Node/Bun/Yarn/NPM projects, lo detects package manager by lockfile:
 .IP \[bu] 2
 .B pnpm-lock.yaml
 ->
@@ -78,10 +225,14 @@ or
 .B package-lock.json
 ->
 .B npm
+.IP \[bu] 2
+.B yarn.lock
+->
+.B yarn
 .PP
 If no supported lockfile is found, lo exits with an error.
 .SH TERMINAL LAUNCH
-lo tries to launch in this order:
+On Linux, lo tries to launch in this order:
 .IP "1." 3
 .B ghostty
 .IP "2." 3
@@ -91,18 +242,22 @@ lo tries to launch in this order:
 .IP "4." 3
 .B gnome-terminal
 .PP
-If none are available, lo runs in the current shell.
+On macOS, lo attempts to launch via Terminal.app (osascript).
+.br
+On Windows, lo attempts to launch via cmd start.
+.br
+If detached launch is not available, lo runs in the current shell.
 .SH DEPENDENCIES
 Required:
 .IP \[bu] 2
-.B bash
+.B one package manager installed (pnpm, bun, npm, or yarn) for Node/Bun/Yarn/NPM projects
 .IP \[bu] 2
-.B jq
+.B cargo for Rust projects
 .PP
 Optional:
 .IP \[bu] 2
-.B fzf
-(for interactive fuzzy menu)
+.B go
+(only required to build from source)
 .SH EXAMPLES
 Start by exact project name:
 .PP
@@ -122,7 +277,7 @@ Edit config:
 lo --edit
 .EE
 .SH FILES
-.B ~/.config/lo/config
+.B ~/.config/lo/config.json
 .br
 .B ~/.local/bin/lo
 .br
