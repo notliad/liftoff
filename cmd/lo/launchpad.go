@@ -93,7 +93,7 @@ func editLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name
 
 	if strings.TrimSpace(name) == "" {
 		names := sortedMapKeys(cfg.Launchpads)
-		picked, pickErr := selectProject(names, nil, "", in, out)
+		picked, pickErr := selectProject(names, nil, "", "Select a launchpad", in, out)
 		if pickErr != nil {
 			return pickErr
 		}

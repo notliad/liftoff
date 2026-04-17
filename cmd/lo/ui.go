@@ -28,6 +28,7 @@ var (
 
 // projectPickerModel is an interactive fuzzy-filter list for choosing one project.
 type projectPickerModel struct {
+	title    string
 	projects []string
 	stackMap map[string]string
 	filter   string
@@ -38,8 +39,9 @@ type projectPickerModel struct {
 	canceled bool
 }
 
-func newProjectPickerModel(projects []string, stackMap map[string]string, initialFilter string) *projectPickerModel {
+func newProjectPickerModel(title string, projects []string, stackMap map[string]string, initialFilter string) *projectPickerModel {
 	return &projectPickerModel{
+		title:    title,
 		projects: projects,
 		stackMap: stackMap,
 		filter:   strings.TrimSpace(initialFilter),
@@ -113,23 +115,33 @@ func (m *projectPickerModel) View() string {
 	m.ensureCursorBounds()
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("🚀 Liftoff"))
-	b.WriteString(titleStyle.Render("\n\n📚 Select a project"))
-	b.WriteString("\n")
-	if m.filter == "" {
-		b.WriteString(mutedStyle.Render("🔎 Filter: (none)"))
-	} else {
-		b.WriteString(promptStyle.Render("🔎 Filter: "))
-		b.WriteString(m.filter)
+
+	title := m.title
+	if title == "" {
+		title = "Select a project"
 	}
+
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("󰍉 Type to filter | ↑/↓ (or j/k) move | Enter launch | Esc cancel"))
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
+	b.WriteString("\n\n")
+	b.WriteString(" " + promptStyle.Render(title))
+	if len(m.projects) > 0 {
+		b.WriteString("  " + mutedStyle.Render(fmt.Sprintf("(%d)", len(m.projects))))
+	}
+	b.WriteString("\n\n")
+
+	b.WriteString(" ")
+	if m.filter == "" {
+		b.WriteString(mutedStyle.Render("🔎  type to filter..."))
+	} else {
+		b.WriteString(promptStyle.Render("🔎  ") + m.filter + mutedStyle.Render("▌"))
+	}
 	b.WriteString("\n\n")
 
 	if len(filtered) == 0 {
-		b.WriteString(warnStyle.Render("⚠️ No projects match this filter."))
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render("0 results"))
+		b.WriteString(" " + warnStyle.Render("⚠  no results for \""+m.filter+"\""))
+		b.WriteString("\n\n")
+		b.WriteString(" " + mutedStyle.Render("↑↓ navigate  ·  esc cancel"))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -145,43 +157,59 @@ func (m *projectPickerModel) View() string {
 			maxName = l
 		}
 	}
-	if maxName > 25 {
-		maxName = 25
+	if maxName > 30 {
+		maxName = 30
 	}
 
-	nameHeader := fmt.Sprintf("%-*s", maxName, "Project")
-	b.WriteString(mutedStyle.Render("   " + nameHeader + "  Stack"))
+	sepLen := maxName + 20
+	if sepLen < 40 {
+		sepLen = 40
+	}
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("  %-*s  %s", maxName, "Project", "Stack")))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
 	b.WriteString("\n")
 
 	for i := m.offset; i < end; i++ {
 		name := filtered[i]
-		if len(name) > maxName {
+		displayName := name
+		if len(displayName) > maxName {
 			if maxName > 3 {
-				name = name[:maxName-3] + "..."
+				displayName = displayName[:maxName-3] + "..."
 			} else {
-				name = name[:maxName]
+				displayName = displayName[:maxName]
 			}
 		}
 		stack := "-"
 		if s, ok := m.stackMap[filtered[i]]; ok && strings.TrimSpace(s) != "" {
 			stack = s
 		}
-		line := fmt.Sprintf("  %-*s  %s", maxName, name, stack)
 		if i == m.cursor {
-			line = selectedStyle.Render("❯ " + fmt.Sprintf("%-*s  %s", maxName, name, stack))
+			b.WriteString(selectedStyle.Render("❯ "))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%-*s", maxName, displayName)))
+			b.WriteString("  ")
+			b.WriteString(previewStyle.Render(stack))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(fmt.Sprintf("%-*s", maxName, displayName))
+			b.WriteString("  ")
+			b.WriteString(mutedStyle.Render(stack))
 		}
-		b.WriteString(line)
 		b.WriteString("\n")
 	}
 
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+
+	var statusText string
 	if len(filtered) > m.height {
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render(fmt.Sprintf("%d results | showing %d-%d", len(filtered), m.offset+1, end)))
+		statusText = fmt.Sprintf("%d–%d of %d  ·  ", m.offset+1, end, len(filtered))
 	} else {
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render(fmt.Sprintf("%d results", len(filtered))))
+		statusText = fmt.Sprintf("%d results  ·  ", len(filtered))
 	}
+	b.WriteString(" " + mutedStyle.Render(statusText+"↑↓ navigate  ·  ⏎ launch  ·  esc cancel"))
 	b.WriteString("\n")
+
 	return b.String()
 }
 
@@ -272,30 +300,30 @@ func (m *projectsDirPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *projectsDirPromptModel) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("📁 Configure projects directory"))
+
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("Type one or more paths (comma-separated), relative to ~ or absolute."))
-	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("Esc cancels."))
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
 	b.WriteString("\n\n")
-	b.WriteString(promptStyle.Render("Path: "))
+	b.WriteString(" " + promptStyle.Render("Configure projects directory"))
+	b.WriteString("\n\n")
+	b.WriteString(" " + mutedStyle.Render("One or more paths, comma-separated. Relative to ~ or absolute."))
+	b.WriteString("\n\n")
+	b.WriteString(" " + promptStyle.Render("📁  "))
 	b.WriteString(m.input.View())
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	if m.errorText != "" {
-		b.WriteString(warnStyle.Render(m.errorText))
-		b.WriteString("\n")
+		b.WriteString(" " + warnStyle.Render("⚠  "+m.errorText))
+		b.WriteString("\n\n")
 	}
 
 	if m.selected != "" {
-		b.WriteString(successStyle.Render("✅ Using: " + m.selected))
-		b.WriteString("\n")
+		b.WriteString(" " + successStyle.Render("✓  "+m.selected))
+		b.WriteString("\n\n")
 	}
 
-	if strings.TrimSpace(m.input.Value()) != "" {
-		b.WriteString(mutedStyle.Render("Current: " + m.input.Value()))
-		b.WriteString("\n")
-	}
+	b.WriteString(" " + mutedStyle.Render("⏎ confirm  ·  esc cancel"))
+	b.WriteString("\n")
 
 	return b.String()
 }
@@ -396,22 +424,28 @@ func (m *projectChecklistModel) View() string {
 	m.ensureCursorBounds()
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(m.title))
+
 	b.WriteString("\n")
-	if m.filter == "" {
-		b.WriteString(mutedStyle.Render("🔎 Filter: (none)"))
-	} else {
-		b.WriteString(promptStyle.Render("🔎 Filter: "))
-		b.WriteString(m.filter)
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
+	b.WriteString("\n\n")
+	b.WriteString(" " + promptStyle.Render(m.title))
+	if len(m.projects) > 0 {
+		b.WriteString("  " + mutedStyle.Render(fmt.Sprintf("(%d)", len(m.projects))))
 	}
-	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("󰍉 Type to filter | ↑/↓ move | Space toggle | Enter save | Esc cancel"))
+	b.WriteString("\n\n")
+
+	b.WriteString(" ")
+	if m.filter == "" {
+		b.WriteString(mutedStyle.Render("🔎  type to filter..."))
+	} else {
+		b.WriteString(promptStyle.Render("🔎  ") + m.filter + mutedStyle.Render("▌"))
+	}
 	b.WriteString("\n\n")
 
 	if len(filtered) == 0 {
-		b.WriteString(warnStyle.Render("⚠️ No projects match this filter."))
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render(fmt.Sprintf("selected: %d", m.selectedCount())))
+		b.WriteString(" " + warnStyle.Render("⚠  no results for \""+m.filter+"\""))
+		b.WriteString("\n\n")
+		b.WriteString(" " + mutedStyle.Render(fmt.Sprintf("%d selected  ·  ↑↓ navigate  ·  esc cancel", m.selectedCount())))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -421,26 +455,48 @@ func (m *projectChecklistModel) View() string {
 		end = len(filtered)
 	}
 
+	sepLen := 44
+	b.WriteString(mutedStyle.Render("  [ ] Project"))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n")
+
 	for i := m.offset; i < end; i++ {
 		name := filtered[i]
-		box := "[ ]"
 		if m.checked[name] {
-			box = checkedStyle.Render("[x]")
+			if i == m.cursor {
+				b.WriteString(selectedStyle.Render("❯ "))
+				b.WriteString(checkedStyle.Render("[✓] "))
+				b.WriteString(lipgloss.NewStyle().Bold(true).Render(name))
+			} else {
+				b.WriteString("  ")
+				b.WriteString(checkedStyle.Render("[✓] "))
+				b.WriteString(successStyle.Render(name))
+			}
+		} else {
+			if i == m.cursor {
+				b.WriteString(selectedStyle.Render("❯ "))
+				b.WriteString(mutedStyle.Render("[ ] "))
+				b.WriteString(lipgloss.NewStyle().Bold(true).Render(name))
+			} else {
+				b.WriteString("  ")
+				b.WriteString(mutedStyle.Render("[ ] "))
+				b.WriteString(name)
+			}
 		}
-		prefix := "  "
-		if i == m.cursor {
-			prefix = selectedStyle.Render("❯ ")
-		}
-		b.WriteString(prefix)
-		b.WriteString(fmt.Sprintf("%s %s\n", box, name))
+		b.WriteString("\n")
 	}
 
-	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render(fmt.Sprintf("selected: %d", m.selectedCount())))
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+
+	var statusText string
 	if len(filtered) > m.height {
-		b.WriteString(" | ")
-		b.WriteString(mutedStyle.Render(fmt.Sprintf("showing %d-%d of %d", m.offset+1, end, len(filtered))))
+		statusText = fmt.Sprintf("%d–%d of %d  ·  ", m.offset+1, end, len(filtered))
+	} else {
+		statusText = fmt.Sprintf("%d selected  ·  ", m.selectedCount())
 	}
+	b.WriteString(" " + mutedStyle.Render(statusText+"space toggle  ·  ↑↓ navigate  ·  ⏎ save  ·  esc cancel"))
 	b.WriteString("\n")
 	return b.String()
 }

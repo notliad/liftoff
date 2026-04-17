@@ -90,20 +90,17 @@ func previewProjectStack(projectPath string) string {
 
 	if isGoProject(projectPath) {
 		framework := detectGoFramework(projectPath)
-		entry := detectGoEntryHint(projectPath)
-		return fmt.Sprintf("🐹 go / %s / %s", framework, entry)
+		return fmt.Sprintf("🐹 go / %s", framework)
 	}
 
 	if isJavaProject(projectPath) {
 		framework := detectJavaFramework(projectPath)
-		runner := detectJavaRunnerHint(projectPath)
-		return fmt.Sprintf("☕ java / %s / %s", framework, runner)
+		return fmt.Sprintf("☕ java / %s", framework)
 	}
 
 	if isPythonProject(projectPath) {
 		framework := detectPythonFramework(projectPath)
-		runner := detectPythonRunnerHint(projectPath)
-		return fmt.Sprintf("🐍 python / %s / %s", framework, runner)
+		return fmt.Sprintf("🐍 python / %s", framework)
 	}
 
 	return ""
@@ -116,14 +113,8 @@ func previewNodeStack(projectPath string) string {
 		return " node / invalid package.json"
 	}
 
-	script := detectScript(pkg)
-	if script == "" {
-		script = "(no dev/start)"
-	}
-
-	pm := detectPackageManagerFromLockfile(projectPath)
 	framework := detectNodeFramework(pkg)
-	return fmt.Sprintf(" %s / %s / %s", pm, framework, script)
+	return fmt.Sprintf(" node / %s", framework)
 }
 
 // --- Main runner detection entry point ---

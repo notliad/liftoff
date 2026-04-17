@@ -130,13 +130,40 @@ func (m *watchDashboardModel) View() string {
 	uptime := time.Since(m.startedAt).Round(time.Second)
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("👀 lo is watching"))
+
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render(m.title))
-	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render(fmt.Sprintf("Uptime: %s", uptime)))
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
 	b.WriteString("\n\n")
-	b.WriteString(mutedStyle.Render("Project                  PID    Procs  CPU%     Cores    Mem(MB)   Status      Terminal"))
+	b.WriteString(" " + promptStyle.Render("👀  "+m.title))
+	b.WriteString("  " + mutedStyle.Render("uptime: "+uptime.String()))
+	b.WriteString("\n\n")
+
+	const (
+		colProject = 24
+		colPID     = 7
+		colProcs   = 6
+		colCPU     = 8
+		colCores   = 8
+		colMem     = 9
+		colStatus  = 14
+	)
+	header := fmt.Sprintf(" %-*s  %-*s %-*s %-*s %-*s %-*s %-*s %s",
+		colProject, "Project",
+		colPID, "PID",
+		colProcs, "Procs",
+		colCPU, "CPU%",
+		colCores, "Cores",
+		colMem, "Mem(MB)",
+		colStatus, "Status",
+		"Terminal",
+	)
+	sepLen := len(header) + 2
+	if sepLen < 80 {
+		sepLen = 80
+	}
+	b.WriteString(mutedStyle.Render(header))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
 	b.WriteString("\n")
 
 	for _, t := range m.targets {
@@ -147,40 +174,52 @@ func (m *watchDashboardModel) View() string {
 		if status == "" {
 			status = "initializing"
 		}
-		line := fmt.Sprintf("%-24s %-6d %-6d %-8.1f %-8.2f %-9.1f %-11s %s",
-			truncateRunes(t.ProjectName, 24),
-			t.RootPID,
-			t.Stats.ProcessCount,
-			cpu,
-			cores,
-			memMB,
-			status,
-			t.Terminal,
-		)
-		if t.LastErr != "" {
-			line += "  !"
+
+		statusStr := mutedStyle.Render(status)
+		switch status {
+		case "running":
+			statusStr = successStyle.Render(status)
+		case "finished":
+			statusStr = previewStyle.Render(status)
+		case "stats error":
+			statusStr = warnStyle.Render(status)
 		}
-		b.WriteString(line)
+
+		b.WriteString(fmt.Sprintf(" %-*s  %-*d %-*d %-*.1f %-*.2f %-*.1f ",
+			colProject, truncateRunes(t.ProjectName, colProject),
+			colPID, t.RootPID,
+			colProcs, t.Stats.ProcessCount,
+			colCPU, cpu,
+			colCores, cores,
+			colMem, memMB,
+		))
+		b.WriteString(fmt.Sprintf("%-*s ", colStatus, statusStr))
+		b.WriteString(mutedStyle.Render(t.Terminal))
+		if t.LastErr != "" {
+			b.WriteString("  " + warnStyle.Render("⚠"))
+		}
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+
 	if m.allDone {
-		b.WriteString(successStyle.Render("Status: all watched processes finished"))
+		b.WriteString(" " + successStyle.Render("✓  all processes finished"))
 	} else {
-		b.WriteString(successStyle.Render("Status: monitoring"))
+		b.WriteString(" " + successStyle.Render("●  monitoring"))
 	}
 	b.WriteString("\n")
 
 	for _, t := range m.targets {
 		if t.LastErr != "" {
-			b.WriteString(warnStyle.Render(fmt.Sprintf("Warning [%s]: %s", t.ProjectName, t.LastErr)))
+			b.WriteString(" " + warnStyle.Render(fmt.Sprintf("⚠  [%s] %s", t.ProjectName, t.LastErr)))
 			b.WriteString("\n")
 		}
 	}
 
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("Press q/esc to stop monitoring (projects keep running)"))
+	b.WriteString(" " + mutedStyle.Render("q / esc  stop monitoring (projects keep running)"))
 	b.WriteString("\n")
 	return b.String()
 }

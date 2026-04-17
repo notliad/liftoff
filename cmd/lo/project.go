@@ -117,7 +117,7 @@ func chooseProject(entries []projectEntry, query string, in io.Reader, out io.Wr
 
 	projects := displayNames(entries)
 	stackMap := buildProjectStackMap(entries)
-	selected, err := selectProject(projects, stackMap, query, in, out)
+	selected, err := selectProject(projects, stackMap, query, "Select a project", in, out)
 	if err != nil {
 		if query == "" {
 			return projectEntry{}, errors.New("⚠️ no project selected")
@@ -133,20 +133,20 @@ func chooseProject(entries []projectEntry, query string, in io.Reader, out io.Wr
 	return entry, nil
 }
 
-func selectProject(projects []string, stackMap map[string]string, query string, in io.Reader, out io.Writer) (string, error) {
-	return selectWithBubbleTea(projects, stackMap, query, in, out)
+func selectProject(projects []string, stackMap map[string]string, query string, title string, in io.Reader, out io.Writer) (string, error) {
+	return selectWithBubbleTea(projects, stackMap, query, title, in, out)
 }
 
 // selectWithBubbleTea runs the interactive BubbleTea picker, falling back to
 // a line-based menu when stdin/stdout are not a terminal.
-func selectWithBubbleTea(projects []string, stackMap map[string]string, initialQuery string, in io.Reader, out io.Writer) (string, error) {
+func selectWithBubbleTea(projects []string, stackMap map[string]string, initialQuery string, title string, in io.Reader, out io.Writer) (string, error) {
 	inFile, inOk := in.(*os.File)
 	outFile, outOk := out.(*os.File)
 	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
-		return selectWithLineMenu(projects, initialQuery, in, out)
+		return selectWithLineMenu(projects, initialQuery, title, in, out)
 	}
 
-	model := newProjectPickerModel(projects, stackMap, initialQuery)
+	model := newProjectPickerModel(title, projects, stackMap, initialQuery)
 	p := tea.NewProgram(
 		model,
 		tea.WithInput(inFile),
@@ -171,14 +171,14 @@ func selectWithBubbleTea(projects []string, stackMap map[string]string, initialQ
 }
 
 // selectWithLineMenu provides a non-interactive numbered menu for piped/CI contexts.
-func selectWithLineMenu(projects []string, initialQuery string, in io.Reader, out io.Writer) (string, error) {
+func selectWithLineMenu(projects []string, initialQuery string, title string, in io.Reader, out io.Writer) (string, error) {
 	reader := bufio.NewReader(in)
 	filter := strings.TrimSpace(initialQuery)
 
 	for {
 		filtered := filterProjects(projects, filter)
 		fmt.Fprintln(out, "\n🚀 Liftoff")
-		fmt.Fprintln(out, "\n📚 Select a project")
+		fmt.Fprintf(out, "\n📚 %s\n", title)
 		if filter == "" {
 			fmt.Fprintln(out, "🔎 Filter: (none)")
 		} else {
