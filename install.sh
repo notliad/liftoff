@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+OS="$(uname -s)"
+
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 BIN_PATH="$INSTALL_DIR/lo"
 MAN_DIR="${MAN_DIR:-$HOME/.local/share/man/man1}"
@@ -50,7 +52,8 @@ ensure_path_hint() {
 }
 
 refresh_man_db() {
-  if command -v mandb >/dev/null 2>&1; then
+  # mandb is Linux (man-db) only; macOS rebuilds whatis automatically
+  if [[ "$OS" == "Linux" ]] && command -v mandb >/dev/null 2>&1; then
     mandb -q "$HOME/.local/share/man" >/dev/null 2>&1 || true
   fi
 }

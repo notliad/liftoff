@@ -84,24 +84,56 @@ lo --pad backend-stack
 
 ## Installation
 
-### Option 1: Local install script
+> **Requires Go 1.22+** — download from [go.dev/dl](https://go.dev/dl/).
 
-From this repository root:
+### Linux / macOS
 
 ```bash
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
 ```
 
-This builds `./cmd/lo` and installs `lo` to `~/.local/bin/lo`.
-If present, it also installs the man page to `~/.local/share/man/man1/lo.1`.
+Installs `lo` to `~/.local/bin/lo` and the man page to `~/.local/share/man/man1/lo.1`.
 
-### Option 2: Remote install (after publishing)
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex
+```
+
+Installs `lo.exe` to `%LOCALAPPDATA%\Programs\lo\` and adds it to your user `PATH`.
+
+---
+
+### Advanced options
+
+**Install a specific version (Linux/macOS):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh \
   | bash -s -- \
-      --from-module github.com/notliad/liftoff/cmd/lo@latest \
+      --from-module github.com/notliad/liftoff/cmd/lo@v0.4.0 \
       --man-from-url https://raw.githubusercontent.com/notliad/liftoff/main
+```
+
+**Install a specific version (Windows):**
+
+```powershell
+irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex; `
+  .\install.ps1 -FromModule github.com/notliad/liftoff/cmd/lo@v0.4.0
+```
+
+**From local source (both platforms):**
+
+```bash
+bash install.sh --from-local     # Linux/macOS
+.\install.ps1 -FromLocal          # Windows
+```
+
+**Uninstall:**
+
+```bash
+bash install.sh --uninstall      # Linux/macOS
+.\install.ps1 -Uninstall          # Windows
 ```
 
 ## Usage
