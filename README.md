@@ -10,7 +10,6 @@ It can:
 * detect the runtime and package manager automatically
 * install dependencies when needed
 * start the project in a detached terminal
-* watch mode: monitor your projects resources while its running
 
 You stay in flow. ⚡
 
@@ -23,6 +22,7 @@ You stay in flow. ⚡
 * Automatic dependency installation
 * Interactive project picker
 * **Launchpads**: group multiple projects and start them together
+* Watch Mode: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 
 ---
