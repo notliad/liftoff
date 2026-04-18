@@ -4,6 +4,8 @@
 
 Instead of manually navigating folders, installing dependencies, and starting projects one by one, **lo** lets you launch everything from a single command — instantly.
 
+<img width="426" height="238" alt="lifoff" src="https://github.com/user-attachments/assets/13816e5d-d63d-4c61-a3e1-e3988f6a427b" />
+
 It can:
 
 * interactively pick a project from your workspace
