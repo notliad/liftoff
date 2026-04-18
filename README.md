@@ -27,19 +27,33 @@ You stay in flow. ⚡
 * Watch Mode: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 
----
+## Installation
 
-## What is a Launchpad?
-
-A **launchpad** is a named group of projects that you can start at once.
-
-Perfect for full-stack environments, microservices, or any setup where multiple services need to run together.
+### Linux / macOS
 
 ```bash
-lo --pad backend-stack
+curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
 ```
 
----
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex
+```
+
+### Build from source (requires Go 1.22+)
+
+```bash
+bash install.sh --from-local                               # build from ./cmd/lo
+bash install.sh --from-module github.com/notliad/liftoff/cmd/lo@latest
+bash install.sh --uninstall
+```
+
+```powershell
+.\install.ps1 -FromLocal
+.\install.ps1 -FromModule github.com/notliad/liftoff/cmd/lo@latest
+.\install.ps1 -Uninstall
+```
 
 ## Supported Languages & Frameworks
 
@@ -80,32 +94,6 @@ lo --pad backend-stack
 * Framework hints:
   Gin, Fiber, Echo, Chi, Temporal
 
-## Requirements
-
-* Go (`1.25+`) for build/install from source
-
-## Installation
-
-### Option 1: Local install script
-
-From this repository root:
-
-```bash
-bash install.sh
-```
-
-This builds `./cmd/lo` and installs `lo` to `~/.local/bin/lo`.
-If present, it also installs the man page to `~/.local/share/man/man1/lo.1`.
-
-### Option 2: Remote install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh \
-  | bash -s -- \
-      --from-module github.com/notliad/liftoff/cmd/lo@latest \
-      --man-from-url https://raw.githubusercontent.com/notliad/liftoff/main
-```
-
 ## Usage
 
 ```bash
@@ -120,6 +108,20 @@ lo --print-config      # display current directories
 lo --help              # i need somebody :)
 lo --version           # display version
 ```
+
+### Watch mode
+
+* `lo --watch` (`-w`): launches the selected project in another terminal window
+* Shows stats of your projects: CPU and Memory
+
+### Launchpad
+
+* `lo --pad my-work`: runs/create launchpad `my-work`;
+* `lo --pad --edit my-work`: edits projects in launchpad `my-work`
+* `lo --pad --edit`: edit a chosen launchpad
+* `lo --pad --list` (`-p -l`): lists launchpads
+* `lo --pad --list my-work`: shows projects from launchpad `my-work`
+* `lo --list` (`-l`): lists projects across all configured directories
 
 ### First run
 

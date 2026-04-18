@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -224,7 +225,11 @@ func promptProjectsDirWithBubbleTea(current config, inFile, outFile *os.File) (c
 
 func promptProjectsDirLine(current config, in io.Reader, out io.Writer) (config, error) {
 	reader := bufio.NewReader(in)
-	fmt.Fprintln(out, "📁 Enter your projects directories (comma-separated, relative to ~):")
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(out, "📁 Enter your projects directories (comma-separated):")
+	} else {
+		fmt.Fprintln(out, "📁 Enter your projects directories (comma-separated, relative to ~):")
+	}
 	currentDirs := strings.Join(effectiveProjectDirs(current), ", ")
 	if currentDirs != "" {
 		fmt.Fprintf(out, "Current: %s\n", currentDirs)
@@ -275,10 +280,14 @@ func resolveProjectsPaths(home, inputPath string) ([]string, error) {
 		part := strings.TrimSpace(raw)
 		var projectsPath string
 		switch {
-		case part == "":
+		case part == "" || part == "~":
 			projectsPath = home
-		case strings.HasPrefix(part, "~/"):
-			projectsPath = filepath.Join(home, strings.TrimPrefix(part, "~/"))
+		case strings.HasPrefix(part, "~/") || strings.HasPrefix(part, `~\`):
+			// Both ~/ (Unix) and ~\ (Windows-style) are accepted.
+			projectsPath = filepath.Join(home, part[2:])
+		case runtime.GOOS == "windows" && isUserProfilePrefix(part):
+			// %USERPROFILE% or %USERPROFILE%\sub
+			projectsPath = filepath.Join(home, stripUserProfilePrefix(part))
 		case filepath.IsAbs(part):
 			projectsPath = part
 		default:
@@ -302,6 +311,21 @@ func resolveProjectsPaths(home, inputPath string) ([]string, error) {
 	}
 
 	return paths, nil
+}
+
+// isUserProfilePrefix returns true when s starts with %USERPROFILE% (case-insensitive).
+func isUserProfilePrefix(s string) bool {
+	upper := strings.ToUpper(s)
+	return upper == "%USERPROFILE%" || strings.HasPrefix(upper, `%USERPROFILE%\`) || strings.HasPrefix(upper, "%USERPROFILE%/")
+}
+
+// stripUserProfilePrefix removes the %USERPROFILE% prefix and any following separator.
+func stripUserProfilePrefix(s string) string {
+	rest := s[len("%USERPROFILE%"):]
+	if len(rest) > 0 && (rest[0] == '\\' || rest[0] == '/') {
+		return rest[1:]
+	}
+	return rest
 }
 
 // normalizeProjectDirs deduplicates and cleans a list of directory paths.
