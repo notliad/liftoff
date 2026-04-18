@@ -25,19 +25,33 @@ You stay in flow. ⚡
 * Watch Mode: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 
----
+## Installation
 
-## What is a Launchpad?
-
-A **launchpad** is a named group of projects that you can start at once.
-
-Perfect for full-stack environments, microservices, or any setup where multiple services need to run together.
+### Linux / macOS
 
 ```bash
-lo --pad backend-stack
+curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
 ```
 
----
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex
+```
+
+### Build from source (requires Go 1.22+)
+
+```bash
+bash install.sh --from-local                               # build from ./cmd/lo
+bash install.sh --from-module github.com/notliad/liftoff/cmd/lo@latest
+bash install.sh --uninstall
+```
+
+```powershell
+.\install.ps1 -FromLocal
+.\install.ps1 -FromModule github.com/notliad/liftoff/cmd/lo@latest
+.\install.ps1 -Uninstall
+```
 
 ## Supported Languages & Frameworks
 
@@ -78,64 +92,6 @@ lo --pad backend-stack
 * Framework hints:
   Gin, Fiber, Echo, Chi, Temporal
 
-## Requirements
-
-* Go (`1.25+`) for build/install from source
-
-## Installation
-
-> **Requires Go 1.22+** — download from [go.dev/dl](https://go.dev/dl/).
-
-### Linux / macOS
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
-```
-
-Installs `lo` to `~/.local/bin/lo` and the man page to `~/.local/share/man/man1/lo.1`.
-
-### Windows (PowerShell)
-
-```powershell
-irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex
-```
-
-Installs `lo.exe` to `%LOCALAPPDATA%\Programs\lo\` and adds it to your user `PATH`.
-
----
-
-### Advanced options
-
-**Install a specific version (Linux/macOS):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh \
-  | bash -s -- \
-      --from-module github.com/notliad/liftoff/cmd/lo@v0.4.0 \
-      --man-from-url https://raw.githubusercontent.com/notliad/liftoff/main
-```
-
-**Install a specific version (Windows):**
-
-```powershell
-irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex; `
-  .\install.ps1 -FromModule github.com/notliad/liftoff/cmd/lo@v0.4.0
-```
-
-**From local source (both platforms):**
-
-```bash
-bash install.sh --from-local     # Linux/macOS
-.\install.ps1 -FromLocal          # Windows
-```
-
-**Uninstall:**
-
-```bash
-bash install.sh --uninstall      # Linux/macOS
-.\install.ps1 -Uninstall          # Windows
-```
-
 ## Usage
 
 ```bash
@@ -154,16 +110,13 @@ lo --version           # display version
 ### Watch mode
 
 * `lo --watch` (`-w`): launches the selected project in another terminal window
-* Shows Bubble Tea live stats in the terminal where `lo` was executed
-* Stats refresh every 2s for process tree (root + child processes): CPU and memory (RSS)
-* Current limitation: `--watch` is only available for single project launch (not `--pad`)
+* Shows stats of your projects: CPU and Memory
 
 ### Launchpad
 
-* `lo --pad my-work`: runs launchpad `my-work`; if missing, opens a checklist to create it
-* When a launchpad is created, projects are not started automatically
+* `lo --pad my-work`: runs/create launchpad `my-work`;
 * `lo --pad --edit my-work`: edits projects in launchpad `my-work`
-* `lo --pad --edit`: first choose an existing launchpad, then edit it
+* `lo --pad --edit`: edit a chosen launchpad
 * `lo --pad --list` (`-p -l`): lists launchpads
 * `lo --pad --list my-work`: shows projects from launchpad `my-work`
 * `lo --list` (`-l`): lists projects across all configured directories

@@ -4,6 +4,8 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -256,7 +258,12 @@ type projectsDirPromptModel struct {
 
 func newProjectsDirPromptModel(homePath, initialValue string) *projectsDirPromptModel {
 	ti := textinput.New()
-	ti.Placeholder = "~/Projects"
+	// Show a realistic example path for the current OS.
+	if runtime.GOOS == "windows" {
+		ti.Placeholder = filepath.Join(homePath, "Projects")
+	} else {
+		ti.Placeholder = "~/Projects"
+	}
 	ti.Focus()
 	ti.CharLimit = 2048
 	ti.Width = 50
@@ -306,7 +313,11 @@ func (m *projectsDirPromptModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(" " + promptStyle.Render("Configure projects directory"))
 	b.WriteString("\n\n")
-	b.WriteString(" " + mutedStyle.Render("One or more paths, comma-separated. Relative to ~ or absolute."))
+	if runtime.GOOS == "windows" {
+		b.WriteString(" " + mutedStyle.Render("One or more full paths, comma-separated."))
+	} else {
+		b.WriteString(" " + mutedStyle.Render("One or more paths, comma-separated. Relative to ~ or absolute."))
+	}
 	b.WriteString("\n\n")
 	b.WriteString(" " + promptStyle.Render("📁  "))
 	b.WriteString(m.input.View())
