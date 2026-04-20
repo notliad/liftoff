@@ -6,25 +6,13 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 
 <img width="426" height="238" alt="lifoff" src="https://github.com/user-attachments/assets/13816e5d-d63d-4c61-a3e1-e3988f6a427b" />
 
-It can:
-
-* interactively pick a project from your workspace
-* detect the runtime and package manager automatically
-* install dependencies when needed
-* start the project in a detached terminal
-
-You stay in flow. ⚡
-
----
-
 ## Features
 
 * Launch any project from your workspace with a single command
 * Zero-config runtime detection (Node, Rust, Python, Go, Java)
 * Automatic dependency installation
-* Interactive project picker
 * **Launchpads**: group multiple projects and start them together
-* Watch Mode: monitor your projects resources while its running
+* **Watch Mode**: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 
 ## Installation
@@ -109,20 +97,6 @@ lo --print-config, -c  # display current directories
 lo --help              # i need somebody :)
 lo --version           # display version
 ```
-
-### Watch mode
-
-* `lo --watch` (`-w`): launches the selected project in another terminal window
-* Shows stats of your projects: CPU and Memory
-
-### Launchpad
-
-* `lo --pad my-work`: runs/create launchpad `my-work`;
-* `lo --pad --edit my-work`: edits projects in launchpad `my-work`
-* `lo --pad --edit`: edit a chosen launchpad
-* `lo --pad --list` (`-p -l`): lists launchpads
-* `lo --pad --list my-work`: shows projects from launchpad `my-work`
-* `lo --list` (`-l`): lists projects across all configured directories
 
 ### First run
 
