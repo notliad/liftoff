@@ -99,12 +99,13 @@ bash install.sh --uninstall
 ```bash
 lo [project-name]      # run a project
 lo --list, -l          # list projects
-lo --pad, -p [name]    # run a launchpad
-lo --pad --list [name] # list your launchpads
-lo --pad --edit [name] # edit your launchpads
+lo --pad, -p [name]    # run/create a launchpad
+lo --pad --list        # list your launchpads
+lo --pad --list [name] # list projects of a launchpad
+lo --pad --edit [name] # edit your launchpad
 lo --edit, -e          # edit your directories
-lo --watch, -w         # run project in another terminal and monitor stats here
-lo --print-config      # display current directories
+lo --watch, -w [name]  # run project in watch mode
+lo --print-config, -c  # display current directories
 lo --help              # i need somebody :)
 lo --version           # display version
 ```
