@@ -1,4 +1,4 @@
-<img width="1683" height="934" alt="image" src="https://github.com/user-attachments/assets/bfb78c2d-7d02-4741-9833-9d2aed931292" />
+<img width="1683" height="934" alt="liftoff" src="https://github.com/user-attachments/assets/bfb78c2d-7d02-4741-9833-9d2aed931292" />
 
 **lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI designed to remove friction from your development workflow.
 
