@@ -560,3 +560,70 @@ func (m *projectChecklistModel) ensureCursorBounds() {
 		m.offset = 0
 	}
 }
+
+// --- Simple menu (fixed item list, no filter) ---
+
+// simpleMenuModel is a minimal list picker for short fixed-option menus.
+type simpleMenuModel struct {
+	title    string
+	items    []string
+	cursor   int
+	selected string
+	canceled bool
+}
+
+func newSimpleMenuModel(title string, items []string) *simpleMenuModel {
+	return &simpleMenuModel{title: title, items: items}
+}
+
+func (m *simpleMenuModel) Init() tea.Cmd { return nil }
+
+func (m *simpleMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			m.canceled = true
+			return m, tea.Quit
+		case "enter":
+			if len(m.items) > 0 {
+				m.selected = m.items[m.cursor]
+			}
+			return m, tea.Quit
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *simpleMenuModel) View() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
+	b.WriteString("\n\n")
+	b.WriteString(" " + promptStyle.Render(m.title))
+	b.WriteString("\n\n")
+
+	for i, item := range m.items {
+		if i == m.cursor {
+			b.WriteString("  " + selectedStyle.Render("❯ ") + lipgloss.NewStyle().Bold(true).Render(item))
+		} else {
+			b.WriteString("    " + item)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(" " + mutedStyle.Render("↑↓ navigate  ·  ⏎ select  ·  esc cancel"))
+	b.WriteString("\n")
+
+	return b.String()
+}

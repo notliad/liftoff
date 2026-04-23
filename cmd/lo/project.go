@@ -263,6 +263,38 @@ func buildProjectStackMap(projects []projectEntry) map[string]string {
 	return stackMap
 }
 
+// --- Simple menu selection ---
+
+// selectMenuItem opens a minimal menu (no filter) for choosing among a small set of options.
+// Falls back to a numbered line menu when stdin/stdout are not a terminal.
+func selectMenuItem(items []string, title string, in io.Reader, out io.Writer) (string, error) {
+	inFile, inOk := in.(*os.File)
+	outFile, outOk := out.(*os.File)
+	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
+		return selectWithLineMenu(items, "", title, in, out)
+	}
+
+	model := newSimpleMenuModel(title, items)
+	p := tea.NewProgram(
+		model,
+		tea.WithInput(inFile),
+		tea.WithOutput(outFile),
+		tea.WithAltScreen(),
+	)
+
+	result, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+
+	finalModel, ok := result.(*simpleMenuModel)
+	if !ok || finalModel == nil || finalModel.canceled || finalModel.selected == "" {
+		return "", errors.New("canceled")
+	}
+
+	return finalModel.selected, nil
+}
+
 // --- List flow ---
 
 func listProjectsFlow(projects []projectEntry, out io.Writer) {

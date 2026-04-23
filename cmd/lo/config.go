@@ -15,13 +15,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
+	"gopkg.in/yaml.v3"
 )
 
 // config holds the persisted user configuration (projects dirs + launchpads).
 type config struct {
-	ProjectsDir  string              `json:"projectsDir,omitempty"`
-	ProjectsDirs []string            `json:"projectsDirs,omitempty"`
-	Launchpads   map[string][]string `json:"launchpads,omitempty"`
+	ProjectsDir  string              `json:"projectsDir,omitempty" yaml:"projectsDir,omitempty"`
+	ProjectsDirs []string            `json:"projectsDirs,omitempty" yaml:"projectsDirs,omitempty"`
+	Launchpads   map[string][]string `json:"launchpads,omitempty" yaml:"launchpads,omitempty"`
 }
 
 // legacyLaunchpadsFile represents the old separate launchpads.json format.
@@ -31,14 +32,23 @@ type legacyLaunchpadsFile struct {
 
 // --- Paths ---
 
-// configPaths returns (configJSON, legacyPlaintext) paths inside ~/.config/lo/.
+// configPaths returns (configYAML, legacyPlaintext) paths inside ~/.config/lo/.
 func configPaths() (string, string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", "", err
 	}
 	dir := filepath.Join(base, "lo")
-	return filepath.Join(dir, "config.json"), filepath.Join(dir, "config"), nil
+	return filepath.Join(dir, "config.yaml"), filepath.Join(dir, "config"), nil
+}
+
+// legacyConfigJSONPath returns the old config.json path for migration.
+func legacyConfigJSONPath() (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "lo", "config.json"), nil
 }
 
 func legacyLaunchpadsPath() (string, error) {
@@ -73,13 +83,14 @@ func loadOrInitConfig(cfgPath, legacyPath string, in io.Reader, out io.Writer) (
 	return cfg, nil
 }
 
-// loadConfig reads config from the JSON path or falls back to the legacy plaintext format.
+// loadConfig reads config from the YAML path, falling back to old JSON then legacy plaintext.
 func loadConfig(cfgPath, legacyPath string) (config, error) {
 	var cfg config
 
+	// Primary: YAML format
 	if data, err := os.ReadFile(cfgPath); err == nil {
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			return config{}, fmt.Errorf("invalid config json: %w", err)
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return config{}, fmt.Errorf("invalid config yaml: %w", err)
 		}
 		cfg.ProjectsDir = strings.TrimSpace(cfg.ProjectsDir)
 		cfg.ProjectsDirs = normalizeProjectDirs(cfg.ProjectsDirs)
@@ -89,6 +100,21 @@ func loadConfig(cfgPath, legacyPath string) (config, error) {
 		return cfg, nil
 	}
 
+	// Migration: old JSON format (config.json)
+	if jsonPath, err := legacyConfigJSONPath(); err == nil {
+		if data, err := os.ReadFile(jsonPath); err == nil {
+			if err := json.Unmarshal(data, &cfg); err == nil {
+				cfg.ProjectsDir = strings.TrimSpace(cfg.ProjectsDir)
+				cfg.ProjectsDirs = normalizeProjectDirs(cfg.ProjectsDirs)
+				if cfg.Launchpads == nil {
+					cfg.Launchpads = make(map[string][]string)
+				}
+				return cfg, nil
+			}
+		}
+	}
+
+	// Migration: legacy plaintext format
 	if data, err := os.ReadFile(legacyPath); err == nil {
 		line := strings.TrimSpace(string(data))
 		const key = "PROJECTS_DIR="
@@ -122,11 +148,10 @@ func saveConfig(path string, cfg config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
+	b, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
-	b = append(b, '\n')
 	return os.WriteFile(path, b, 0o644)
 }
 
@@ -367,4 +392,47 @@ func allDirsExist(dirs []string) bool {
 		}
 	}
 	return true
+}
+
+// runConfigMenu opens the visual configuration menu where the user can edit
+// project directories or existing launchpads.
+func runConfigMenu(cfgPath string, cfg *config, in io.Reader, out io.Writer) error {
+	const optDirs = "📁  Edit directories"
+	const optPads = "🧩  Edit launchpads"
+
+	choice, err := selectMenuItem([]string{optDirs, optPads}, "⚙  Config", in, out)
+	if err != nil {
+		return nil // canceled
+	}
+
+	switch choice {
+	case optDirs:
+		newCfg, err := promptProjectsDir(*cfg, in, out)
+		if err != nil {
+			if err.Error() == "canceled" {
+				return nil
+			}
+			return err
+		}
+		newCfg.Launchpads = cfg.Launchpads
+		if err := saveConfig(cfgPath, newCfg); err != nil {
+			return fmt.Errorf("❌ failed saving config: %w", err)
+		}
+		fmt.Fprintf(out, "✅ Saved config to %s\n", cfgPath)
+		*cfg = newCfg
+
+	case optPads:
+		if len(cfg.Launchpads) == 0 {
+			fmt.Fprintln(out, "⚠️  No launchpads found. Create one with 'lo --pad <name>'")
+			return nil
+		}
+		dirs := effectiveProjectDirs(*cfg)
+		entries, err := listProjects(dirs)
+		if err != nil {
+			return err
+		}
+		return editLaunchpadFlow(cfgPath, cfg, entries, "", in, out)
+	}
+
+	return nil
 }
