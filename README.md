@@ -1,4 +1,13 @@
 <img width="1683" height="934" alt="liftoff" src="https://github.com/user-attachments/assets/bfb78c2d-7d02-4741-9833-9d2aed931292" />
+<div align="center">
+  
+[![GitHub Stars](https://img.shields.io/github/stars/notliad/liftoff?style=flat&color=FFD700&logo=starship&logoColor=white)](https://github.com/notliad/liftoff/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/notliad/liftoff?style=flat&color=0891b2&logo=github&logoColor=white)](https://github.com/notliad/liftoff/network)
+[![GitHub License](https://img.shields.io/github/license/notliad/liftoff?style=flat&color=22c55e)](https://github.com/notliad/liftoff/blob/main/LICENSE)
+![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Fnotliad%2Fliftoff&label=visitors&countColor=%230c7ebe&style=flat&labelStyle=none)
+![release](https://img.shields.io/github/v/release/notliad/liftoff) ![Go](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)
+
+</div>
 
 **lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI designed to remove friction from your development workflow.
 
