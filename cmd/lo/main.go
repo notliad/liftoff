@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-const version = "0.4.1"
+const version = "0.4.2"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -27,6 +27,12 @@ func main() {
 // run is the testable entry point — parses flags and dispatches to the
 // appropriate workflow (launch, list, pad, config, watch, etc.).
 func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
+	// Hidden subcommand used by watch terminals for inline monitoring.
+	// Syntax: lo --_watch-inline <projectName> <projectPath> <cmd...>
+	if len(args) >= 4 && args[0] == "--_watch-inline" {
+		return runInlineWatch(args[1], args[2], args[3:])
+	}
+
 	fs := flag.NewFlagSet("lo", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 

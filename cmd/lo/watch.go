@@ -1,6 +1,14 @@
 package main
 
-// Watch mode: real-time process monitoring dashboard using BubbleTea.
+// Watch mode: resource-monitor footer pinned at the bottom of the project terminal.
+//
+// When watch mode is active the current terminal is split into two regions:
+//   - Lines 1 .. height-3: a normal scrolling region where the project output appears
+//   - Lines height-2 .. height: a fixed footer showing CPU, memory, and status (updated every 2 s)
+//
+// For launchpads, each project gets its own detached terminal window running
+// "lo --_watch-inline <name> <path> <cmd...>", triggering this same inline
+// behaviour in that window.
 
 import (
 	"errors"
@@ -13,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
 
@@ -34,335 +41,211 @@ type processSample struct {
 	RSSKB      int
 }
 
-type watchTickMsg struct{}
+// watchHeaderLines is the number of lines reserved for the pinned footer.
+const watchHeaderLines = 3
 
-type watchTarget struct {
-	ProjectName string
-	Terminal    string
-	RootPID     int
-	StartedAt   time.Time
+// --- Inline watch (single project in current terminal) ---
 
-	Stats       processTreeStats
-	LastUpdated time.Time
-	LastErr     string
-	Done        bool
-	StatusText  string
-}
-
-// --- BubbleTea dashboard model ---
-
-type watchDashboardModel struct {
-	title     string
-	startedAt time.Time
-	targets   []watchTarget
-	allDone   bool
-}
-
-func newWatchDashboardModel(title string, targets []watchTarget) *watchDashboardModel {
-	return &watchDashboardModel{
-		title:     title,
-		startedAt: time.Now(),
-		targets:   targets,
-	}
-}
-
-func watchTick() tea.Cmd {
-	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-		return watchTickMsg{}
-	})
-}
-
-func (m *watchDashboardModel) Init() tea.Cmd {
-	return watchTick()
-}
-
-func (m *watchDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			m.allDone = true
-			return m, tea.Quit
-		}
-	case watchTickMsg:
-		allDone := true
-		now := time.Now()
-		for i := range m.targets {
-			t := &m.targets[i]
-			if t.Done {
-				continue
-			}
-
-			stats, err := collectProcessTreeStats(t.RootPID)
-			if err != nil {
-				t.LastErr = err.Error()
-				t.LastUpdated = now
-				t.StatusText = "stats error"
-				allDone = false
-				continue
-			}
-
-			if stats.ProcessCount == 0 {
-				t.Done = true
-				t.LastUpdated = now
-				t.StatusText = "finished"
-				continue
-			}
-
-			t.Stats = stats
-			t.LastErr = ""
-			t.LastUpdated = now
-			t.StatusText = "running"
-			allDone = false
-		}
-
-		if allDone {
-			m.allDone = true
-			return m, tea.Quit
-		}
-		return m, watchTick()
-	}
-
-	return m, nil
-}
-
-func (m *watchDashboardModel) View() string {
-	uptime := time.Since(m.startedAt).Round(time.Second)
-
-	var b strings.Builder
-
-	b.WriteString("\n")
-	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
-	b.WriteString("\n\n")
-	b.WriteString(" " + promptStyle.Render("👀  "+m.title))
-	b.WriteString("  " + mutedStyle.Render("uptime: "+uptime.String()))
-	b.WriteString("\n\n")
-
-	const (
-		colProject = 24
-		colPID     = 7
-		colProcs   = 6
-		colCPU     = 8
-		colCores   = 8
-		colMem     = 9
-		colStatus  = 14
-	)
-	header := fmt.Sprintf(" %-*s  %-*s %-*s %-*s %-*s %-*s %-*s %s",
-		colProject, "Project",
-		colPID, "PID",
-		colProcs, "Procs",
-		colCPU, "CPU%",
-		colCores, "Cores",
-		colMem, "Mem(MB)",
-		colStatus, "Status",
-		"Terminal",
-	)
-	sepLen := len(header) + 2
-	if sepLen < 80 {
-		sepLen = 80
-	}
-	b.WriteString(mutedStyle.Render(header))
-	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
-	b.WriteString("\n")
-
-	for _, t := range m.targets {
-		memMB := float64(t.Stats.RSSKB) / 1024.0
-		cpu := t.Stats.CPUPercent
-		cores := t.Stats.CPUCoresUsed
-		status := t.StatusText
-		if status == "" {
-			status = "initializing"
-		}
-
-		statusStr := mutedStyle.Render(status)
-		switch status {
-		case "running":
-			statusStr = successStyle.Render(status)
-		case "finished":
-			statusStr = previewStyle.Render(status)
-		case "stats error":
-			statusStr = warnStyle.Render(status)
-		}
-
-		b.WriteString(fmt.Sprintf(" %-*s  %-*d %-*d %-*.1f %-*.2f %-*.1f ",
-			colProject, truncateRunes(t.ProjectName, colProject),
-			colPID, t.RootPID,
-			colProcs, t.Stats.ProcessCount,
-			colCPU, cpu,
-			colCores, cores,
-			colMem, memMB,
-		))
-		b.WriteString(fmt.Sprintf("%-*s ", colStatus, statusStr))
-		b.WriteString(mutedStyle.Render(t.Terminal))
-		if t.LastErr != "" {
-			b.WriteString("  " + warnStyle.Render("⚠"))
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
-	b.WriteString("\n\n")
-
-	if m.allDone {
-		b.WriteString(" " + successStyle.Render("✓  all processes finished"))
-	} else {
-		b.WriteString(" " + successStyle.Render("●  monitoring"))
-	}
-	b.WriteString("\n")
-
-	for _, t := range m.targets {
-		if t.LastErr != "" {
-			b.WriteString(" " + warnStyle.Render(fmt.Sprintf("⚠  [%s] %s", t.ProjectName, t.LastErr)))
-			b.WriteString("\n")
-		}
-	}
-
-	b.WriteString("\n")
-	b.WriteString(" " + mutedStyle.Render("q / esc  stop monitoring (projects keep running)"))
-	b.WriteString("\n")
-	return b.String()
-}
-
-// --- Watch mode launchers ---
-
-// launchWithWatch starts a single project in a detached terminal and opens the
-// monitoring dashboard.
-func launchWithWatch(projectPath, projectName string, runCmd []string, in io.Reader, out io.Writer, errOut io.Writer) error {
+// runInlineWatch runs a project in the current terminal while keeping a
+// real-time resource strip pinned to the bottom watchHeaderLines lines.
+// The project stdout/stderr flows normally into the scroll region above.
+func runInlineWatch(projectName, projectPath string, runCmd []string) error {
 	if len(runCmd) == 0 {
 		return errors.New("empty command")
 	}
+	ttyFd := int(os.Stdout.Fd())
+	if !term.IsTerminal(ttyFd) {
+		// Not interactive: just run the project directly.
+		return runCommandInDir(projectPath, runCmd, os.Stdout, os.Stderr)
+	}
 	if !hasCommand("ps") {
-		return errors.New("❌ watch mode requires 'ps' command")
+		return errors.New("watch mode requires ps command")
 	}
 
-	pid, terminalName, err := startWatchTerminal(projectPath, runCmd)
+	_, height, err := term.GetSize(ttyFd)
+	if err != nil || height <= watchHeaderLines+2 {
+		height = 24
+	}
+
+	// Clear screen, set scroll region to [1 .. height-watchHeaderLines], move
+	// cursor to the top-left so project output starts there.
+	fmt.Printf("\033[2J\033[1;%dr\033[1;1H", height-watchHeaderLines)
+
+	cmd := exec.Command(runCmd[0], runCmd[1:]...)
+	cmd.Dir = projectPath
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Start(); err != nil {
+		resetScrollRegion(height)
+		return fmt.Errorf("failed to start %s: %w", projectName, err)
+	}
+
+	pid := cmd.Process.Pid
+	startedAt := time.Now()
+
+	// Draw the initial footer before the project writes anything.
+	drawInlineFooter(projectName, pid, startedAt, processTreeStats{}, "starting", height)
+
+	stopCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				stats, statsErr := collectProcessTreeStats(pid)
+				status := "running"
+				if statsErr != nil || stats.ProcessCount == 0 {
+					status = "finishing"
+				}
+				drawInlineFooter(projectName, pid, startedAt, stats, status, height)
+			case <-stopCh:
+				return
+			}
+		}
+	}()
+
+	waitErr := cmd.Wait()
+	close(stopCh)
+
+	drawInlineFooter(projectName, pid, startedAt, processTreeStats{}, "finished", height)
+	resetScrollRegion(height)
+	return waitErr
+}
+
+// drawInlineFooter saves the cursor, jumps to the pinned footer region at the
+// bottom of the terminal, redraws it, then restores the cursor.
+func drawInlineFooter(projectName string, pid int, startedAt time.Time, stats processTreeStats, status string, termHeight int) {
+	uptime := time.Since(startedAt).Round(time.Second)
+	memMB := float64(stats.RSSKB) / 1024.0
+
+	// Footer occupies the last watchHeaderLines rows:
+	//   separatorLine : ──────────
+	//   titleLine     : 🚀 name  uptime  pid
+	//   statsLine     : cpu  mem  procs  status
+	separatorLine := termHeight - watchHeaderLines + 1
+	titleLine := separatorLine + 1
+	statsLine := separatorLine + 2
+
+	var b strings.Builder
+
+	// Save cursor (DECSC).
+	b.WriteString("\0337")
+
+	// Separator.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", separatorLine))
+	b.WriteString(mutedStyle.Render(strings.Repeat("\u2500", 72)))
+
+	// Title bar.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", titleLine))
+	b.WriteString(titleStyle.Render(fmt.Sprintf(" \U0001f680 %-22s", truncateRunes(projectName, 22))))
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("  uptime %-9s  pid %d", uptime, pid)))
+
+	// Stats bar.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", statsLine))
+	var statusRendered string
+	switch status {
+	case "starting", "finishing":
+		statusRendered = warnStyle.Render(status)
+	case "finished":
+		statusRendered = mutedStyle.Render(status)
+	default:
+		statusRendered = successStyle.Render(status)
+	}
+	b.WriteString(fmt.Sprintf("    %s  %s  %s  %s",
+		mutedStyle.Render(fmt.Sprintf("cpu %5.1f%%", stats.CPUPercent)),
+		mutedStyle.Render(fmt.Sprintf("mem %6.1f MB", memMB)),
+		mutedStyle.Render(fmt.Sprintf("procs %d", stats.ProcessCount)),
+		statusRendered,
+	))
+
+	// Restore cursor (DECRC).
+	b.WriteString("\0338")
+
+	fmt.Print(b.String())
+}
+
+// resetScrollRegion resets the scroll region to the full screen and moves the
+// cursor to the bottom so the shell prompt appears in a clean spot.
+func resetScrollRegion(height int) {
+	// \033[r  -- DECSTBM with no args: restore full-screen scrolling
+	fmt.Printf("\033[r\033[%d;1H\n", height)
+}
+
+// --- Entry point called by launchProject ---
+
+// launchWithWatch opens a new terminal window for the project where the inline
+// resource-monitor footer is pinned at the bottom.
+func launchWithWatch(projectPath, projectName string, runCmd []string, _ io.Reader, out io.Writer, errOut io.Writer) error {
+	termName, err := startInlineWatchTerminal(projectName, projectPath, runCmd)
 	if err != nil {
 		return err
 	}
-
-	inFile, inOk := in.(*os.File)
-	outFile, outOk := out.(*os.File)
-	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
-		return errors.New("❌ watch mode requires an interactive terminal")
-	}
-
-	target := watchTarget{
-		ProjectName: projectName,
-		Terminal:    terminalName,
-		RootPID:     pid,
-		StartedAt:   time.Now(),
-		StatusText:  "initializing",
-	}
-
-	model := newWatchDashboardModel(
-		fmt.Sprintf("Project: %s", projectName),
-		[]watchTarget{target},
-	)
-	p := tea.NewProgram(
-		model,
-		tea.WithInput(inFile),
-		tea.WithOutput(outFile),
-		tea.WithAltScreen(),
-	)
-
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(errOut, "⚠️ watch UI exited with error: %v\n", err)
-		return err
-	}
-
+	fmt.Fprintf(out, "   ↳ opened in %s\n", termName)
 	return nil
 }
 
-// launchProjectsWatchMode starts all launchpad projects in detached terminals
-// and shows a combined monitoring dashboard.
-func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in io.Reader, out io.Writer, errOut io.Writer) error {
+// --- Launchpad watch mode ---
+
+// launchProjectsWatchMode opens each project in its own terminal window, each
+// running "lo --_watch-inline" to display the inline resource-monitor footer.
+func launchProjectsWatchMode(launchpadName string, projects []projectEntry, _ io.Reader, out io.Writer, errOut io.Writer) error {
 	if len(projects) == 0 {
-		return errors.New("⚠️ launchpad has no projects")
+		return errors.New("launchpad has no projects")
 	}
 
-	fmt.Fprintf(out, "👀 Watch mode for launchpad '%s' (%d projects)\n", launchpadName, len(projects))
+	fmt.Fprintf(out, "Watch mode -- launchpad '%s' (%d projects)\n\n", launchpadName, len(projects))
 
-	targets := make([]watchTarget, 0, len(projects))
-	startupErrors := make([]string, 0)
-
+	launched := 0
 	for _, project := range projects {
 		target, installCmd, runCmd, err := detectProjectRunner(project.Path)
 		if err != nil {
-			startupErrors = append(startupErrors, fmt.Sprintf("%s: %v", project.Name, err))
+			fmt.Fprintf(errOut, "warning: %s: %v\n", project.Name, err)
 			continue
 		}
 
 		if len(installCmd) > 0 {
-			fmt.Fprintf(out, "📦 Installing dependencies for %s...\n", project.Name)
+			fmt.Fprintf(out, "Installing dependencies for %s...\n", project.Name)
 			if err := runCommandInDir(project.Path, installCmd, out, errOut); err != nil {
-				startupErrors = append(startupErrors, fmt.Sprintf("%s: install failed (%v)", project.Name, err))
+				fmt.Fprintf(errOut, "warning: %s: install failed: %v\n", project.Name, err)
 				continue
 			}
 		}
 
-		fmt.Fprintf(out, "🚀 Launching %s with %s\n", project.Name, target)
-		pid, terminalName, err := startWatchTerminal(project.Path, runCmd)
+		fmt.Fprintf(out, "Launching %s with %s\n", project.Name, target)
+		termName, err := startInlineWatchTerminal(project.Name, project.Path, runCmd)
 		if err != nil {
-			startupErrors = append(startupErrors, fmt.Sprintf("%s: %v", project.Name, err))
+			fmt.Fprintf(errOut, "warning: %s: %v\n", project.Name, err)
 			continue
 		}
-
-		targets = append(targets, watchTarget{
-			ProjectName: project.Name,
-			Terminal:    terminalName,
-			RootPID:     pid,
-			StartedAt:   time.Now(),
-			StatusText:  "initializing",
-		})
+		fmt.Fprintf(out, "  opened in %s\n", termName)
+		launched++
 	}
 
-	if len(targets) == 0 {
-		if len(startupErrors) == 0 {
-			return errors.New("❌ no project could be launched in watch mode")
-		}
-		return fmt.Errorf("❌ failed to start watch mode (first error: %s)", startupErrors[0])
+	if launched == 0 {
+		return errors.New("no project could be launched in watch mode")
 	}
-
-	for _, msg := range startupErrors {
-		fmt.Fprintf(errOut, "⚠️ %s\n", msg)
-	}
-
-	inFile, inOk := in.(*os.File)
-	outFile, outOk := out.(*os.File)
-	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
-		return errors.New("❌ watch mode requires an interactive terminal")
-	}
-
-	model := newWatchDashboardModel(
-		fmt.Sprintf("Launchpad: %s", launchpadName),
-		targets,
-	)
-	p := tea.NewProgram(
-		model,
-		tea.WithInput(inFile),
-		tea.WithOutput(outFile),
-		tea.WithAltScreen(),
-	)
-
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(errOut, "⚠️ watch UI exited with error: %v\n", err)
-		return err
-	}
-
 	return nil
 }
 
-// --- Terminal spawning ---
-
-// startWatchTerminal opens a detached terminal and returns the PID of the
-// process running the command. Currently Linux-only.
-func startWatchTerminal(projectPath string, runCmd []string) (int, string, error) {
+// startInlineWatchTerminal opens a new terminal window that runs
+// "lo --_watch-inline <name> <path> <cmd...>".
+func startInlineWatchTerminal(projectName, projectPath string, runCmd []string) (string, error) {
 	if runtime.GOOS != "linux" {
-		return 0, "", fmt.Errorf("❌ --watch with external terminal is currently supported on Linux only")
+		return "", errors.New("watch mode with external terminal is currently supported on Linux only")
 	}
 
-	shellLine := fmt.Sprintf("cd %s && %s", shellQuote(projectPath), shellJoin(runCmd))
+	loExe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("could not resolve lo executable: %w", err)
+	}
+
+	// Build: lo --_watch-inline <name> <path> <cmd...>
+	allArgs := append([]string{loExe, "--_watch-inline", projectName, projectPath}, runCmd...)
+	shellLine := shellJoin(allArgs)
+
 	terminals := []struct {
 		name string
 		args []string
@@ -381,19 +264,14 @@ func startWatchTerminal(projectPath string, runCmd []string) (int, string, error
 		if err := cmd.Start(); err != nil {
 			continue
 		}
-		if cmd.Process == nil {
-			continue
-		}
-		return cmd.Process.Pid, termDef.name, nil
+		return termDef.name, nil
 	}
 
-	return 0, "", errors.New("❌ watch mode could not open a terminal (tried: ghostty, kitty, alacritty, gnome-terminal)")
+	return "", errors.New("could not open a terminal (tried: ghostty, kitty, alacritty, gnome-terminal)")
 }
 
 // --- Process tree stats ---
 
-// collectProcessTreeStats walks the process tree rooted at rootPID and
-// aggregates CPU and memory usage.
 func collectProcessTreeStats(rootPID int) (processTreeStats, error) {
 	samples, err := readProcessSamples()
 	if err != nil {
@@ -460,7 +338,6 @@ func normalizeCPUPercent(rawCPU float64) float64 {
 	return normalized
 }
 
-// readProcessSamples parses the output of `ps -eo pid=,ppid=,%cpu=,rss=`.
 func readProcessSamples() ([]processSample, error) {
 	out, err := exec.Command("ps", "-eo", "pid=,ppid=,%cpu=,rss=").Output()
 	if err != nil {
