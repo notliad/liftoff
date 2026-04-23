@@ -10,3 +10,6 @@
 # Local build artifacts (if any)
 dist/
 build/
+
+# Scripts locais (não versionados)
+scripts/
