@@ -23,6 +23,20 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
 ```
 
+### Arch Linux (AUR)
+
+You can install **lo** directly from the AUR using an AUR helper like `yay` or `paru`:
+
+```bash
+yay -S liftoff
+```
+
+or
+
+```bash
+paru -S liftoff
+```
+
 ### Windows (PowerShell)
 
 ```powershell
