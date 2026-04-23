@@ -1,4 +1,13 @@
-# 🚀 lo (Liftoff)
+<img width="1683" height="934" alt="liftoff" src="https://github.com/user-attachments/assets/bfb78c2d-7d02-4741-9833-9d2aed931292" />
+<div align="center">
+  
+[![GitHub Stars](https://img.shields.io/github/stars/notliad/liftoff?style=flat&color=FFD700&logo=starship&logoColor=white)](https://github.com/notliad/liftoff/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/notliad/liftoff?style=flat&color=0891b2&logo=github&logoColor=white)](https://github.com/notliad/liftoff/network)
+[![GitHub License](https://img.shields.io/github/license/notliad/liftoff?style=flat&color=22c55e)](https://github.com/notliad/liftoff/blob/main/LICENSE)
+![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Fnotliad%2Fliftoff&label=visitors&countColor=%230c7ebe&style=flat&labelStyle=none)
+![release](https://img.shields.io/github/v/release/notliad/liftoff) ![Go](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)
+
+</div>
 
 **lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI designed to remove friction from your development workflow.
 
@@ -6,25 +15,13 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 
 <img width="426" height="238" alt="lifoff" src="https://github.com/user-attachments/assets/13816e5d-d63d-4c61-a3e1-e3988f6a427b" />
 
-It can:
-
-* interactively pick a project from your workspace
-* detect the runtime and package manager automatically
-* install dependencies when needed
-* start the project in a detached terminal
-
-You stay in flow. ⚡
-
----
-
 ## Features
 
 * Launch any project from your workspace with a single command
 * Zero-config runtime detection (Node, Rust, Python, Go, Java)
 * Automatic dependency installation
-* Interactive project picker
 * **Launchpads**: group multiple projects and start them together
-* Watch Mode: monitor your projects resources while its running
+* **Watch Mode**: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 
 ## Installation
@@ -33,6 +30,20 @@ You stay in flow. ⚡
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
+```
+
+### Arch Linux (AUR)
+
+You can install **lo** directly from the AUR using an AUR helper like `yay` or `paru`:
+
+```bash
+yay -S liftoff
+```
+
+or
+
+```bash
+paru -S liftoff
 ```
 
 ### Windows (PowerShell)
@@ -99,29 +110,16 @@ bash install.sh --uninstall
 ```bash
 lo [project-name]      # run a project
 lo --list, -l          # list projects
-lo --pad, -p [name]    # run a launchpad
-lo --pad --list [name] # list your launchpads
-lo --pad --edit [name] # edit your launchpads
+lo --pad, -p [name]    # run/create a launchpad
+lo --pad --list        # list your launchpads
+lo --pad --list [name] # list projects of a launchpad
+lo --pad --edit [name] # edit your launchpad
 lo --edit, -e          # edit your directories
-lo --watch, -w         # run project in another terminal and monitor stats here
-lo --print-config      # display current directories
+lo --watch, -w [name]  # run project in watch mode
+lo --print-config, -c  # display current directories
 lo --help              # i need somebody :)
 lo --version           # display version
 ```
-
-### Watch mode
-
-* `lo --watch` (`-w`): launches the selected project in another terminal window
-* Shows stats of your projects: CPU and Memory
-
-### Launchpad
-
-* `lo --pad my-work`: runs/create launchpad `my-work`;
-* `lo --pad --edit my-work`: edits projects in launchpad `my-work`
-* `lo --pad --edit`: edit a chosen launchpad
-* `lo --pad --list` (`-p -l`): lists launchpads
-* `lo --pad --list my-work`: shows projects from launchpad `my-work`
-* `lo --list` (`-l`): lists projects across all configured directories
 
 ### First run
 
