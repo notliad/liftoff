@@ -18,30 +18,30 @@ import (
 // existing one by launching all its projects.
 func runLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name string, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer) error {
 	if cfg.Launchpads == nil {
-		cfg.Launchpads = make(map[string][]string)
+		cfg.Launchpads = make(map[string][]launchpadEntry)
 	}
 	projects := displayNames(entries)
 
-	selectedProjects, exists := cfg.Launchpads[name]
+	savedEntries, exists := cfg.Launchpads[name]
 	if !exists {
 		fmt.Fprintf(out, "⚠️ Launchpad '%s' not found. Let's create it.\n", name)
-		selectedProjects, err := selectProjectsForLaunchpad(projects, nil, fmt.Sprintf("🧩 Create launchpad: %s", name), in, out)
+		selectedEntries, err := selectProjectsForLaunchpad(projects, nil, fmt.Sprintf("🧩 Create launchpad: %s", name), in, out)
 		if err != nil {
 			return err
 		}
-		if len(selectedProjects) == 0 {
+		if len(selectedEntries) == 0 {
 			return errors.New("⚠️ launchpad must contain at least one project")
 		}
-		cfg.Launchpads[name] = selectedProjects
+		cfg.Launchpads[name] = selectedEntries
 		if err := saveConfig(cfgPath, *cfg); err != nil {
 			return fmt.Errorf("❌ could not save launchpad: %w", err)
 		}
-		fmt.Fprintf(out, "✅ Launchpad '%s' saved with %d projects\n", name, len(selectedProjects))
+		fmt.Fprintf(out, "✅ Launchpad '%s' saved with %d projects\n", name, len(selectedEntries))
 		fmt.Fprintf(out, "💡 Run 'lo --pad %s' again to start these projects\n", name)
 		return nil
 	}
 
-	resolvedProjects := resolveLaunchpadProjects(selectedProjects, entries)
+	resolvedProjects := resolveLaunchpadProjects(savedEntries, entries)
 	if len(resolvedProjects) == 0 {
 		return fmt.Errorf("⚠️ launchpad '%s' has no resolvable projects", name)
 	}
@@ -50,7 +50,11 @@ func runLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name 
 		return launchProjectsWatchMode(name, resolvedProjects, in, out, errOut)
 	}
 
-	return launchProjectsParallel(name, resolvedProjects, out, errOut)
+	groups := groupByLaunchOrder(resolvedProjects)
+	if len(groups) <= 1 {
+		return launchProjectsParallel(name, resolvedProjects, out, errOut)
+	}
+	return launchProjectsSequential(name, groups, out, errOut)
 }
 
 func listLaunchpadsFlow(cfg config, launchpadName string, out io.Writer) error {
@@ -60,13 +64,17 @@ func listLaunchpadsFlow(cfg config, launchpadName string, out io.Writer) error {
 	}
 
 	if strings.TrimSpace(launchpadName) != "" {
-		projects, ok := cfg.Launchpads[launchpadName]
+		entries, ok := cfg.Launchpads[launchpadName]
 		if !ok {
 			return fmt.Errorf("❌ launchpad not found: %s", launchpadName)
 		}
-		fmt.Fprintf(out, "🧩 Launchpad: %s (%d projects)\n", launchpadName, len(projects))
-		for _, project := range projects {
-			fmt.Fprintf(out, "- %s\n", project)
+		fmt.Fprintf(out, "🧩 Launchpad: %s (%d projects)\n", launchpadName, len(entries))
+		for _, e := range entries {
+			o := e.Order
+			if o < 1 {
+				o = 1
+			}
+			fmt.Fprintf(out, "- %s (batch %d)\n", e.Name, o)
 		}
 		return nil
 	}
@@ -74,10 +82,14 @@ func listLaunchpadsFlow(cfg config, launchpadName string, out io.Writer) error {
 	names := sortedMapKeys(cfg.Launchpads)
 	fmt.Fprintf(out, "🧩 Launchpads (%d):\n", len(names))
 	for _, name := range names {
-		projects := cfg.Launchpads[name]
-		fmt.Fprintf(out, "- %s (%d)\n", name, len(projects))
-		for _, project := range projects {
-			fmt.Fprintf(out, "  - %s\n", project)
+		entries := cfg.Launchpads[name]
+		fmt.Fprintf(out, "- %s (%d)\n", name, len(entries))
+		for _, e := range entries {
+			o := e.Order
+			if o < 1 {
+				o = 1
+			}
+			fmt.Fprintf(out, "  - %s (batch %d)\n", e.Name, o)
 		}
 	}
 	return nil
@@ -85,7 +97,7 @@ func listLaunchpadsFlow(cfg config, launchpadName string, out io.Writer) error {
 
 func editLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name string, in io.Reader, out io.Writer) error {
 	if cfg.Launchpads == nil {
-		cfg.Launchpads = make(map[string][]string)
+		cfg.Launchpads = make(map[string][]launchpadEntry)
 	}
 	if len(cfg.Launchpads) == 0 {
 		return errors.New("⚠️ no launchpads found to edit")
@@ -106,7 +118,7 @@ func editLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name
 	}
 
 	projects := displayNames(entries)
-	updated, err := selectProjectsForLaunchpad(projects, current, fmt.Sprintf("🛠 Edit launchpad: %s", name), in, out)
+	updated, err := selectProjectsForLaunchpad(projects, current, fmt.Sprintf("🛠  Edit launchpad: %s", name), in, out)
 	if err != nil {
 		return err
 	}
@@ -130,21 +142,16 @@ func editLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name
 
 // --- Project multi-selection ---
 
-// selectProjectsForLaunchpad opens the checklist model (TTY) or a line-based
-// fallback for choosing which projects belong to a launchpad.
-func selectProjectsForLaunchpad(projects []string, selected []string, title string, in io.Reader, out io.Writer) ([]string, error) {
-	selectedSet := make(map[string]bool, len(selected))
-	for _, name := range selected {
-		selectedSet[name] = true
-	}
-
+// selectProjectsForLaunchpad opens the ordered checklist model (TTY) or a line-based
+// fallback for choosing which projects belong to a launchpad and their launch order.
+func selectProjectsForLaunchpad(projects []string, selected []launchpadEntry, title string, in io.Reader, out io.Writer) ([]launchpadEntry, error) {
 	inFile, inOk := in.(*os.File)
 	outFile, outOk := out.(*os.File)
 	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
-		return selectProjectsForLaunchpadLine(projects, selectedSet, in, out)
+		return selectProjectsForLaunchpadLine(projects, selected, in, out)
 	}
 
-	model := newProjectChecklistModel(title, projects, selectedSet)
+	model := newProjectChecklistModel(title, projects, selected)
 	p := tea.NewProgram(
 		model,
 		tea.WithInput(inFile),
@@ -165,67 +172,85 @@ func selectProjectsForLaunchpad(projects []string, selected []string, title stri
 		return nil, errors.New("canceled")
 	}
 
-	return finalModel.selectedProjects(), nil
+	return finalModel.selectedEntries(), nil
 }
 
-func selectProjectsForLaunchpadLine(projects []string, selectedSet map[string]bool, in io.Reader, out io.Writer) ([]string, error) {
+func selectProjectsForLaunchpadLine(projects []string, selected []launchpadEntry, in io.Reader, out io.Writer) ([]launchpadEntry, error) {
+	selectedSet := make(map[string]int, len(selected))
+	for _, e := range selected {
+		o := e.Order
+		if o < 1 {
+			o = 1
+		}
+		selectedSet[e.Name] = o
+	}
+
 	reader := bufio.NewReader(in)
 	fmt.Fprintln(out, "📚 Select projects (comma-separated names), empty to keep current:")
 	for i, p := range projects {
-		marker := "[ ]"
-		if selectedSet[p] {
-			marker = "[x]"
+		if o, ok := selectedSet[p]; ok {
+			fmt.Fprintf(out, "  %2d) [%d] %s\n", i+1, o, p)
+		} else {
+			fmt.Fprintf(out, "  %2d) [ ] %s\n", i+1, p)
 		}
-		fmt.Fprintf(out, "  %2d) %s %s\n", i+1, marker, p)
 	}
-	fmt.Fprint(out, "\n󰍉 Projects: ")
+	fmt.Fprint(out, "\n Projects: ")
 	line, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	line = strings.TrimSpace(line)
 	if line == "" {
-		outSelected := make([]string, 0)
+		out := make([]launchpadEntry, 0, len(selectedSet))
 		for _, p := range projects {
-			if selectedSet[p] {
-				outSelected = append(outSelected, p)
+			if o, ok := selectedSet[p]; ok {
+				out = append(out, launchpadEntry{Name: p, Order: o})
 			}
 		}
-		return outSelected, nil
+		return out, nil
 	}
 
-	requested := make(map[string]bool)
+	result := make([]launchpadEntry, 0)
 	for _, chunk := range strings.Split(line, ",") {
 		name := strings.TrimSpace(chunk)
-		if name != "" {
-			requested[name] = true
+		if name == "" {
+			continue
+		}
+		for _, p := range projects {
+			if p == name {
+				o := 1
+				if prev, ok := selectedSet[p]; ok {
+					o = prev
+				}
+				result = append(result, launchpadEntry{Name: p, Order: o})
+				break
+			}
 		}
 	}
-
-	outSelected := make([]string, 0)
-	for _, p := range projects {
-		if requested[p] {
-			outSelected = append(outSelected, p)
-		}
-	}
-	return outSelected, nil
+	return result, nil
 }
 
 // --- Resolution ---
 
-// resolveLaunchpadProjects maps saved display-names back to discovered project entries.
-func resolveLaunchpadProjects(saved []string, entries []projectEntry) []projectEntry {
+// resolveLaunchpadProjects maps saved launchpadEntries back to discovered project entries,
+// preserving each entry's LaunchOrder for sequential batch launching.
+func resolveLaunchpadProjects(saved []launchpadEntry, entries []projectEntry) []projectEntry {
 	resolved := make([]projectEntry, 0, len(saved))
 	used := make(map[string]bool)
 
 	for _, item := range saved {
-		item = strings.TrimSpace(item)
-		if item == "" {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
 			continue
 		}
+		o := item.Order
+		if o < 1 {
+			o = 1
+		}
 
-		if exact, ok := findProjectByDisplay(entries, item); ok {
+		if exact, ok := findProjectByDisplay(entries, name); ok {
 			if !used[exact.Path] {
+				exact.LaunchOrder = o
 				resolved = append(resolved, exact)
 				used[exact.Path] = true
 			}
@@ -233,7 +258,8 @@ func resolveLaunchpadProjects(saved []string, entries []projectEntry) []projectE
 		}
 
 		for _, entry := range entries {
-			if entry.Name == item && !used[entry.Path] {
+			if entry.Name == name && !used[entry.Path] {
+				entry.LaunchOrder = o
 				resolved = append(resolved, entry)
 				used[entry.Path] = true
 				break

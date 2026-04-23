@@ -30,8 +30,8 @@ func hasCommand(cmd string) bool {
 	return err == nil
 }
 
-// sortedMapKeys returns the keys of a map[string][]string in sorted order.
-func sortedMapKeys(m map[string][]string) []string {
+// sortedMapKeys returns the keys of any map[string]V in sorted order.
+func sortedMapKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)

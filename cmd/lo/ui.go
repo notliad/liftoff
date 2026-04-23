@@ -308,18 +308,23 @@ func (m *projectsDirPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *projectsDirPromptModel) View() string {
 	var b strings.Builder
 
+	const sepLen = 52
+
 	b.WriteString("\n")
 	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
 	b.WriteString("\n\n")
-	b.WriteString(" " + promptStyle.Render("Configure projects directory"))
+	b.WriteString(" " + promptStyle.Render("📁  Edit directories"))
 	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+
 	if runtime.GOOS == "windows" {
 		b.WriteString(" " + mutedStyle.Render("One or more full paths, comma-separated."))
 	} else {
 		b.WriteString(" " + mutedStyle.Render("One or more paths, comma-separated. Relative to ~ or absolute."))
 	}
 	b.WriteString("\n\n")
-	b.WriteString(" " + promptStyle.Render("📁  "))
+	b.WriteString(" " + promptStyle.Render("  "))
 	b.WriteString(m.input.View())
 	b.WriteString("\n\n")
 
@@ -333,19 +338,23 @@ func (m *projectsDirPromptModel) View() string {
 		b.WriteString("\n\n")
 	}
 
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
 	b.WriteString(" " + mutedStyle.Render("⏎ confirm  ·  esc cancel"))
 	b.WriteString("\n")
 
 	return b.String()
 }
 
-// --- Project checklist (multi-selection for launchpads) ---
+// --- Project checklist (multi-selection for launchpads with order) ---
 
-// projectChecklistModel allows toggling multiple projects on/off.
+// projectChecklistModel allows toggling projects on/off and assigning a launch order.
+// Left/right arrows change the batch number for the focused checked project.
 type projectChecklistModel struct {
 	title    string
 	projects []string
 	checked  map[string]bool
+	order    map[string]int // batch order per checked project (1-based)
 	filter   string
 	cursor   int
 	offset   int
@@ -354,16 +363,22 @@ type projectChecklistModel struct {
 	canceled bool
 }
 
-func newProjectChecklistModel(title string, projects []string, initiallyChecked map[string]bool) *projectChecklistModel {
-	checked := make(map[string]bool, len(initiallyChecked))
-	for k, v := range initiallyChecked {
-		checked[k] = v
+func newProjectChecklistModel(title string, projects []string, initial []launchpadEntry) *projectChecklistModel {
+	checked := make(map[string]bool, len(initial))
+	order := make(map[string]int, len(initial))
+	for _, e := range initial {
+		checked[e.Name] = true
+		o := e.Order
+		if o < 1 {
+			o = 1
+		}
+		order[e.Name] = o
 	}
-
 	return &projectChecklistModel{
 		title:    title,
 		projects: projects,
 		checked:  checked,
+		order:    order,
 		height:   12,
 	}
 }
@@ -406,6 +421,25 @@ func (m *projectChecklistModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(filtered) > 0 {
 				name := filtered[m.cursor]
 				m.checked[name] = !m.checked[name]
+				if m.checked[name] && m.order[name] == 0 {
+					m.order[name] = 1
+				}
+			}
+		case "left":
+			filtered := m.filteredProjects()
+			if len(filtered) > 0 {
+				name := filtered[m.cursor]
+				if m.checked[name] && m.order[name] > 1 {
+					m.order[name]--
+				}
+			}
+		case "right":
+			filtered := m.filteredProjects()
+			if len(filtered) > 0 {
+				name := filtered[m.cursor]
+				if m.checked[name] {
+					m.order[name]++
+				}
 			}
 		case "backspace", "ctrl+h":
 			runes := []rune(m.filter)
@@ -453,6 +487,7 @@ func (m *projectChecklistModel) View() string {
 	}
 	b.WriteString("\n\n")
 
+	const sepLen = 52
 	if len(filtered) == 0 {
 		b.WriteString(" " + warnStyle.Render("⚠  no results for \""+m.filter+"\""))
 		b.WriteString("\n\n")
@@ -466,8 +501,7 @@ func (m *projectChecklistModel) View() string {
 		end = len(filtered)
 	}
 
-	sepLen := 44
-	b.WriteString(mutedStyle.Render("  [ ] Project"))
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("  %-5s  Project", "Batch")))
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
 	b.WriteString("\n")
@@ -475,23 +509,29 @@ func (m *projectChecklistModel) View() string {
 	for i := m.offset; i < end; i++ {
 		name := filtered[i]
 		if m.checked[name] {
+			o := m.order[name]
+			if o < 1 {
+				o = 1
+			}
+			orderStr := fmt.Sprintf("[%d]", o)
 			if i == m.cursor {
 				b.WriteString(selectedStyle.Render("❯ "))
-				b.WriteString(checkedStyle.Render("[✓] "))
+				b.WriteString(checkedStyle.Render(fmt.Sprintf("%-5s  ", orderStr)))
 				b.WriteString(lipgloss.NewStyle().Bold(true).Render(name))
+				b.WriteString(mutedStyle.Render("  ← →"))
 			} else {
 				b.WriteString("  ")
-				b.WriteString(checkedStyle.Render("[✓] "))
+				b.WriteString(checkedStyle.Render(fmt.Sprintf("%-5s  ", orderStr)))
 				b.WriteString(successStyle.Render(name))
 			}
 		} else {
 			if i == m.cursor {
 				b.WriteString(selectedStyle.Render("❯ "))
-				b.WriteString(mutedStyle.Render("[ ] "))
+				b.WriteString(mutedStyle.Render("[ ]    "))
 				b.WriteString(lipgloss.NewStyle().Bold(true).Render(name))
 			} else {
 				b.WriteString("  ")
-				b.WriteString(mutedStyle.Render("[ ] "))
+				b.WriteString(mutedStyle.Render("[ ]    "))
 				b.WriteString(name)
 			}
 		}
@@ -507,7 +547,7 @@ func (m *projectChecklistModel) View() string {
 	} else {
 		statusText = fmt.Sprintf("%d selected  ·  ", m.selectedCount())
 	}
-	b.WriteString(" " + mutedStyle.Render(statusText+"space toggle  ·  ↑↓ navigate  ·  ⏎ save  ·  esc cancel"))
+	b.WriteString(" " + mutedStyle.Render(statusText+"space select  ·  ←→ order  ·  ↑↓ navigate  ·  ⏎ save  ·  esc cancel"))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -526,14 +566,20 @@ func (m *projectChecklistModel) selectedCount() int {
 	return count
 }
 
-func (m *projectChecklistModel) selectedProjects() []string {
-	selected := make([]string, 0)
+// selectedEntries returns the selected projects as ordered launchpadEntries,
+// maintaining the original discovery order within each batch.
+func (m *projectChecklistModel) selectedEntries() []launchpadEntry {
+	entries := make([]launchpadEntry, 0)
 	for _, project := range m.projects {
 		if m.checked[project] {
-			selected = append(selected, project)
+			o := m.order[project]
+			if o < 1 {
+				o = 1
+			}
+			entries = append(entries, launchpadEntry{Name: project, Order: o})
 		}
 	}
-	return selected
+	return entries
 }
 
 func (m *projectChecklistModel) ensureCursorBounds() {
@@ -606,10 +652,14 @@ func (m *simpleMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *simpleMenuModel) View() string {
 	var b strings.Builder
 
+	const sepLen = 52
+
 	b.WriteString("\n")
 	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
 	b.WriteString("\n\n")
 	b.WriteString(" " + promptStyle.Render(m.title))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
 	b.WriteString("\n\n")
 
 	for i, item := range m.items {
@@ -622,6 +672,8 @@ func (m *simpleMenuModel) View() string {
 	}
 
 	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
 	b.WriteString(" " + mutedStyle.Render("↑↓ navigate  ·  ⏎ select  ·  esc cancel"))
 	b.WriteString("\n")
 

@@ -18,16 +18,53 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// launchpadEntry represents a project in a launchpad with its launch order.
+// Order 1 is the first batch; equal orders launch simultaneously.
+type launchpadEntry struct {
+	Name  string `yaml:"name"`
+	Order int    `yaml:"order,omitempty"`
+}
+
+// UnmarshalYAML lets launchpadEntry load both plain strings (old format) and structs.
+func (e *launchpadEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		e.Name = value.Value
+		e.Order = 1
+		return nil
+	}
+	type plain launchpadEntry
+	return value.Decode((*plain)(e))
+}
+
 // config holds the persisted user configuration (projects dirs + launchpads).
 type config struct {
-	ProjectsDir  string              `json:"projectsDir,omitempty" yaml:"projectsDir,omitempty"`
-	ProjectsDirs []string            `json:"projectsDirs,omitempty" yaml:"projectsDirs,omitempty"`
-	Launchpads   map[string][]string `json:"launchpads,omitempty" yaml:"launchpads,omitempty"`
+	ProjectsDirs []string                    `yaml:"projectsDirs,omitempty"`
+	Launchpads   map[string][]launchpadEntry `yaml:"launchpads,omitempty"`
+}
+
+// legacyJSONConfig is used to migrate the old config.json format.
+type legacyJSONConfig struct {
+	ProjectsDir  string              `json:"projectsDir,omitempty"`
+	ProjectsDirs []string            `json:"projectsDirs,omitempty"`
+	Launchpads   map[string][]string `json:"launchpads,omitempty"`
 }
 
 // legacyLaunchpadsFile represents the old separate launchpads.json format.
 type legacyLaunchpadsFile struct {
 	Pads map[string][]string `json:"pads"`
+}
+
+// convertLegacyLaunchpads converts old []string launchpad format to []launchpadEntry.
+func convertLegacyLaunchpads(pads map[string][]string) map[string][]launchpadEntry {
+	result := make(map[string][]launchpadEntry, len(pads))
+	for name, projects := range pads {
+		entries := make([]launchpadEntry, len(projects))
+		for i, p := range projects {
+			entries[i] = launchpadEntry{Name: p, Order: 1}
+		}
+		result[name] = entries
+	}
+	return result
 }
 
 // --- Paths ---
@@ -85,17 +122,15 @@ func loadOrInitConfig(cfgPath, legacyPath string, in io.Reader, out io.Writer) (
 
 // loadConfig reads config from the YAML path, falling back to old JSON then legacy plaintext.
 func loadConfig(cfgPath, legacyPath string) (config, error) {
-	var cfg config
-
 	// Primary: YAML format
 	if data, err := os.ReadFile(cfgPath); err == nil {
+		var cfg config
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return config{}, fmt.Errorf("invalid config yaml: %w", err)
 		}
-		cfg.ProjectsDir = strings.TrimSpace(cfg.ProjectsDir)
 		cfg.ProjectsDirs = normalizeProjectDirs(cfg.ProjectsDirs)
 		if cfg.Launchpads == nil {
-			cfg.Launchpads = make(map[string][]string)
+			cfg.Launchpads = make(map[string][]launchpadEntry)
 		}
 		return cfg, nil
 	}
@@ -103,11 +138,18 @@ func loadConfig(cfgPath, legacyPath string) (config, error) {
 	// Migration: old JSON format (config.json)
 	if jsonPath, err := legacyConfigJSONPath(); err == nil {
 		if data, err := os.ReadFile(jsonPath); err == nil {
-			if err := json.Unmarshal(data, &cfg); err == nil {
-				cfg.ProjectsDir = strings.TrimSpace(cfg.ProjectsDir)
-				cfg.ProjectsDirs = normalizeProjectDirs(cfg.ProjectsDirs)
+			var legacy legacyJSONConfig
+			if err := json.Unmarshal(data, &legacy); err == nil {
+				dirs := normalizeProjectDirs(legacy.ProjectsDirs)
+				if len(dirs) == 0 && legacy.ProjectsDir != "" {
+					dirs = normalizeProjectDirs([]string{legacy.ProjectsDir})
+				}
+				cfg := config{
+					ProjectsDirs: dirs,
+					Launchpads:   convertLegacyLaunchpads(legacy.Launchpads),
+				}
 				if cfg.Launchpads == nil {
-					cfg.Launchpads = make(map[string][]string)
+					cfg.Launchpads = make(map[string][]launchpadEntry)
 				}
 				return cfg, nil
 			}
@@ -126,10 +168,10 @@ func loadConfig(cfgPath, legacyPath string) (config, error) {
 		if v == "" {
 			return config{}, errors.New("legacy config has empty PROJECTS_DIR")
 		}
-		cfg.ProjectsDir = v
-		cfg.ProjectsDirs = []string{v}
-		cfg.Launchpads = make(map[string][]string)
-		return cfg, nil
+		return config{
+			ProjectsDirs: []string{v},
+			Launchpads:   make(map[string][]launchpadEntry),
+		}, nil
 	}
 
 	return config{}, errors.New("config not found")
@@ -141,9 +183,8 @@ func saveConfig(path string, cfg config) error {
 		return errors.New("projects dirs cannot be empty")
 	}
 	cfg.ProjectsDirs = dirs
-	cfg.ProjectsDir = dirs[0]
 	if cfg.Launchpads == nil {
-		cfg.Launchpads = make(map[string][]string)
+		cfg.Launchpads = make(map[string][]launchpadEntry)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -184,14 +225,18 @@ func migrateLegacyLaunchpads(cfgPath string, cfg *config, out io.Writer) error {
 	}
 
 	if cfg.Launchpads == nil {
-		cfg.Launchpads = make(map[string][]string)
+		cfg.Launchpads = make(map[string][]launchpadEntry)
 	}
 	changed := false
 	for name, projects := range legacy.Pads {
 		if _, exists := cfg.Launchpads[name]; exists {
 			continue
 		}
-		cfg.Launchpads[name] = projects
+		entries := make([]launchpadEntry, len(projects))
+		for i, p := range projects {
+			entries[i] = launchpadEntry{Name: p, Order: 1}
+		}
+		cfg.Launchpads[name] = entries
 		changed = true
 	}
 	if !changed {
@@ -230,6 +275,7 @@ func promptProjectsDirWithBubbleTea(current config, inFile, outFile *os.File) (c
 		model,
 		tea.WithInput(inFile),
 		tea.WithOutput(outFile),
+		tea.WithAltScreen(),
 	)
 
 	result, err := p.Run()
@@ -245,7 +291,7 @@ func promptProjectsDirWithBubbleTea(current config, inFile, outFile *os.File) (c
 		return config{}, errors.New("❌ invalid directory")
 	}
 
-	return config{ProjectsDir: finalModel.selecteds[0], ProjectsDirs: finalModel.selecteds, Launchpads: current.Launchpads}, nil
+	return config{ProjectsDirs: finalModel.selecteds, Launchpads: current.Launchpads}, nil
 }
 
 func promptProjectsDirLine(current config, in io.Reader, out io.Writer) (config, error) {
@@ -279,7 +325,7 @@ func promptProjectsDirLine(current config, in io.Reader, out io.Writer) (config,
 		return config{}, err
 	}
 
-	return config{ProjectsDir: projectsPaths[0], ProjectsDirs: projectsPaths, Launchpads: current.Launchpads}, nil
+	return config{ProjectsDirs: projectsPaths, Launchpads: current.Launchpads}, nil
 }
 
 // --- Path resolution helpers ---
@@ -374,14 +420,7 @@ func normalizeProjectDirs(dirs []string) []string {
 
 // effectiveProjectDirs returns the resolved list of project root directories.
 func effectiveProjectDirs(cfg config) []string {
-	dirs := normalizeProjectDirs(cfg.ProjectsDirs)
-	if len(dirs) > 0 {
-		return dirs
-	}
-	if strings.TrimSpace(cfg.ProjectsDir) == "" {
-		return nil
-	}
-	return normalizeProjectDirs([]string{cfg.ProjectsDir})
+	return normalizeProjectDirs(cfg.ProjectsDirs)
 }
 
 func allDirsExist(dirs []string) bool {

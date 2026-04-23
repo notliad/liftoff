@@ -20,10 +20,11 @@ import (
 
 // projectEntry represents a discovered runnable project on disk.
 type projectEntry struct {
-	Name    string
-	Path    string
-	RootDir string
-	Display string // includes root hint when names collide across roots
+	Name        string
+	Path        string
+	RootDir     string
+	Display     string // includes root hint when names collide across roots
+	LaunchOrder int    // batch position within a launchpad (0 treated as 1)
 }
 
 // --- Discovery ---
