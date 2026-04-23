@@ -1,6 +1,14 @@
 package main
 
-// Watch mode: real-time process monitoring dashboard using BubbleTea.
+// Watch mode: resource-monitor footer pinned at the bottom of the project terminal.
+//
+// When watch mode is active the current terminal is split into two regions:
+//   - Lines 1 .. height-3: a normal scrolling region where the project output appears
+//   - Lines height-2 .. height: a fixed footer showing CPU, memory, and status (updated every 2 s)
+//
+// For launchpads, each project gets its own detached terminal window running
+// "lo --_watch-inline <name> <path> <cmd...>", triggering this same inline
+// behaviour in that window.
 
 import (
 	"errors"
@@ -66,11 +74,9 @@ func newWatchDashboardModel(title string, targets []watchTarget) *watchDashboard
 	}
 }
 
-func watchTick() tea.Cmd {
-	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-		return watchTickMsg{}
-	})
-}
+	// Clear screen, set scroll region to [1 .. height-watchHeaderLines], move
+	// cursor to the top-left so project output starts there.
+	fmt.Printf("\033[2J\033[1;%dr\033[1;1H", height-watchHeaderLines)
 
 func (m *watchDashboardModel) Init() tea.Cmd {
 	return watchTick()
@@ -93,13 +99,27 @@ func (m *watchDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				continue
 			}
 
-			stats, err := collectProcessTreeStats(t.RootPID)
-			if err != nil {
-				t.LastErr = err.Error()
-				t.LastUpdated = now
-				t.StatusText = "stats error"
-				allDone = false
-				continue
+	pid := cmd.Process.Pid
+	startedAt := time.Now()
+
+	// Draw the initial footer before the project writes anything.
+	drawInlineFooter(projectName, pid, startedAt, processTreeStats{}, "starting", height)
+
+	stopCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				stats, statsErr := collectProcessTreeStats(pid)
+				status := "running"
+				if statsErr != nil || stats.ProcessCount == 0 {
+					status = "finishing"
+				}
+				drawInlineFooter(projectName, pid, startedAt, stats, status, height)
+			case <-stopCh:
+				return
 			}
 
 			if stats.ProcessCount == 0 {
@@ -123,43 +143,49 @@ func (m *watchDashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, watchTick()
 	}
 
-	return m, nil
+	drawInlineFooter(projectName, pid, startedAt, processTreeStats{}, "finished", height)
+	resetScrollRegion(height)
+	return waitErr
 }
 
-func (m *watchDashboardModel) View() string {
-	uptime := time.Since(m.startedAt).Round(time.Second)
+// drawInlineFooter saves the cursor, jumps to the pinned footer region at the
+// bottom of the terminal, redraws it, then restores the cursor.
+func drawInlineFooter(projectName string, pid int, startedAt time.Time, stats processTreeStats, status string, termHeight int) {
+	uptime := time.Since(startedAt).Round(time.Second)
+	memMB := float64(stats.RSSKB) / 1024.0
+
+	// Footer occupies the last watchHeaderLines rows:
+	//   separatorLine : ─────────
+	//   titleLine     : 🚀 name  uptime  pid
+	//   statsLine     : cpu  mem  procs  status
+	separatorLine := termHeight - watchHeaderLines + 1
+	titleLine := separatorLine + 1
+	statsLine := separatorLine + 2
 
 	var b strings.Builder
 
-	b.WriteString("\n")
-	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
-	b.WriteString("\n\n")
-	b.WriteString(" " + promptStyle.Render("👀  "+m.title))
-	b.WriteString("  " + mutedStyle.Render("uptime: "+uptime.String()))
-	b.WriteString("\n\n")
+	// Save cursor (DECSC).
+	b.WriteString("\0337")
 
-	const (
-		colProject = 24
-		colPID     = 7
-		colProcs   = 6
-		colCPU     = 8
-		colCores   = 8
-		colMem     = 9
-		colStatus  = 14
-	)
-	header := fmt.Sprintf(" %-*s  %-*s %-*s %-*s %-*s %-*s %-*s %s",
-		colProject, "Project",
-		colPID, "PID",
-		colProcs, "Procs",
-		colCPU, "CPU%",
-		colCores, "Cores",
-		colMem, "Mem(MB)",
-		colStatus, "Status",
-		"Terminal",
-	)
-	sepLen := len(header) + 2
-	if sepLen < 80 {
-		sepLen = 80
+	// Separator.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", separatorLine))
+	b.WriteString(mutedStyle.Render(strings.Repeat("\u2500", 72)))
+
+	// Title bar.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", titleLine))
+	b.WriteString(titleStyle.Render(fmt.Sprintf(" \U0001f680 %-22s", truncateRunes(projectName, 22))))
+	b.WriteString(mutedStyle.Render(fmt.Sprintf("  uptime %-9s  pid %d", uptime, pid)))
+
+	// Stats bar.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", statsLine))
+	var statusRendered string
+	switch status {
+	case "starting", "finishing":
+		statusRendered = warnStyle.Render(status)
+	case "finished":
+		statusRendered = mutedStyle.Render(status)
+	default:
+		statusRendered = successStyle.Render(status)
 	}
 	b.WriteString(mutedStyle.Render(header))
 	b.WriteString("\n")
@@ -175,31 +201,8 @@ func (m *watchDashboardModel) View() string {
 			status = "initializing"
 		}
 
-		statusStr := mutedStyle.Render(status)
-		switch status {
-		case "running":
-			statusStr = successStyle.Render(status)
-		case "finished":
-			statusStr = previewStyle.Render(status)
-		case "stats error":
-			statusStr = warnStyle.Render(status)
-		}
-
-		b.WriteString(fmt.Sprintf(" %-*s  %-*d %-*d %-*.1f %-*.2f %-*.1f ",
-			colProject, truncateRunes(t.ProjectName, colProject),
-			colPID, t.RootPID,
-			colProcs, t.Stats.ProcessCount,
-			colCPU, cpu,
-			colCores, cores,
-			colMem, memMB,
-		))
-		b.WriteString(fmt.Sprintf("%-*s ", colStatus, statusStr))
-		b.WriteString(mutedStyle.Render(t.Terminal))
-		if t.LastErr != "" {
-			b.WriteString("  " + warnStyle.Render("⚠"))
-		}
-		b.WriteString("\n")
-	}
+	// Restore cursor (DECRC).
+	b.WriteString("\0338")
 
 	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
 	b.WriteString("\n\n")
