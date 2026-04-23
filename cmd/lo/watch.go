@@ -1,10 +1,10 @@
 package main
 
-// Watch mode: resource-monitor header pinned at the top of the project terminal.
+// Watch mode: resource-monitor footer pinned at the bottom of the project terminal.
 //
 // When watch mode is active the current terminal is split into two regions:
-//   - Lines 1-3: a fixed header showing CPU, memory, and status (updated every 2 s)
-//   - Lines 4+:  a normal scrolling region where the project output appears
+//   - Lines 1 .. height-3: a normal scrolling region where the project output appears
+//   - Lines height-2 .. height: a fixed footer showing CPU, memory, and status (updated every 2 s)
 //
 // For launchpads, each project gets its own detached terminal window running
 // "lo --_watch-inline <name> <path> <cmd...>", triggering this same inline
@@ -67,10 +67,9 @@ func runInlineWatch(projectName, projectPath string, runCmd []string) error {
 		height = 24
 	}
 
-	// Clear screen, set scroll region to [watchHeaderLines+1 .. height], move
-	// cursor to the first scrollable line so project output starts there.
-	fmt.Printf("\033[2J\033[%d;%dr\033[%d;1H",
-		watchHeaderLines+1, height, watchHeaderLines+1)
+	// Clear screen, set scroll region to [1 .. height-watchHeaderLines], move
+	// cursor to the top-left so project output starts there.
+	fmt.Printf("\033[2J\033[1;%dr\033[1;1H", height-watchHeaderLines)
 
 	cmd := exec.Command(runCmd[0], runCmd[1:]...)
 	cmd.Dir = projectPath
@@ -86,8 +85,8 @@ func runInlineWatch(projectName, projectPath string, runCmd []string) error {
 	pid := cmd.Process.Pid
 	startedAt := time.Now()
 
-	// Draw the initial header before the project writes anything.
-	drawInlineHeader(projectName, pid, startedAt, processTreeStats{}, "starting")
+	// Draw the initial footer before the project writes anything.
+	drawInlineFooter(projectName, pid, startedAt, processTreeStats{}, "starting", height)
 
 	stopCh := make(chan struct{})
 	go func() {
@@ -101,7 +100,7 @@ func runInlineWatch(projectName, projectPath string, runCmd []string) error {
 				if statsErr != nil || stats.ProcessCount == 0 {
 					status = "finishing"
 				}
-				drawInlineHeader(projectName, pid, startedAt, stats, status)
+				drawInlineFooter(projectName, pid, startedAt, stats, status, height)
 			case <-stopCh:
 				return
 			}
@@ -111,29 +110,41 @@ func runInlineWatch(projectName, projectPath string, runCmd []string) error {
 	waitErr := cmd.Wait()
 	close(stopCh)
 
-	drawInlineHeader(projectName, pid, startedAt, processTreeStats{}, "finished")
+	drawInlineFooter(projectName, pid, startedAt, processTreeStats{}, "finished", height)
 	resetScrollRegion(height)
 	return waitErr
 }
 
-// drawInlineHeader saves the cursor, jumps to the pinned header region,
-// redraws it, then restores the cursor.
-func drawInlineHeader(projectName string, pid int, startedAt time.Time, stats processTreeStats, status string) {
+// drawInlineFooter saves the cursor, jumps to the pinned footer region at the
+// bottom of the terminal, redraws it, then restores the cursor.
+func drawInlineFooter(projectName string, pid int, startedAt time.Time, stats processTreeStats, status string, termHeight int) {
 	uptime := time.Since(startedAt).Round(time.Second)
 	memMB := float64(stats.RSSKB) / 1024.0
+
+	// Footer occupies the last watchHeaderLines rows:
+	//   separatorLine : ─────────
+	//   titleLine     : 🚀 name  uptime  pid
+	//   statsLine     : cpu  mem  procs  status
+	separatorLine := termHeight - watchHeaderLines + 1
+	titleLine := separatorLine + 1
+	statsLine := separatorLine + 2
 
 	var b strings.Builder
 
 	// Save cursor (DECSC).
 	b.WriteString("\0337")
 
-	// Line 1: title bar.
-	b.WriteString("\033[1;1H\033[2K")
+	// Separator.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", separatorLine))
+	b.WriteString(mutedStyle.Render(strings.Repeat("\u2500", 72)))
+
+	// Title bar.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", titleLine))
 	b.WriteString(titleStyle.Render(fmt.Sprintf(" \U0001f680 %-22s", truncateRunes(projectName, 22))))
 	b.WriteString(mutedStyle.Render(fmt.Sprintf("  uptime %-9s  pid %d", uptime, pid)))
 
-	// Line 2: stats bar.
-	b.WriteString("\033[2;1H\033[2K")
+	// Stats bar.
+	b.WriteString(fmt.Sprintf("\033[%d;1H\033[2K", statsLine))
 	var statusRendered string
 	switch status {
 	case "starting", "finishing":
@@ -149,10 +160,6 @@ func drawInlineHeader(projectName string, pid int, startedAt time.Time, stats pr
 		mutedStyle.Render(fmt.Sprintf("procs %d", stats.ProcessCount)),
 		statusRendered,
 	))
-
-	// Line 3: separator.
-	b.WriteString("\033[3;1H\033[2K")
-	b.WriteString(mutedStyle.Render(strings.Repeat("\u2500", 72)))
 
 	// Restore cursor (DECRC).
 	b.WriteString("\0338")
