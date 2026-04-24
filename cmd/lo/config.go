@@ -15,10 +15,17 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
+	"gopkg.in/yaml.v3"
 )
 
-// config holds the persisted user configuration (projects dirs + launchpads).
+// config holds the persisted user configuration.
 type config struct {
+	Dirs       []string            `yaml:"dirs"`
+	Launchpads map[string][]string `yaml:"launchpads,omitempty"`
+}
+
+// legacyJSONConfig is used only for migrating old config.json files.
+type legacyJSONConfig struct {
 	ProjectsDir  string              `json:"projectsDir,omitempty"`
 	ProjectsDirs []string            `json:"projectsDirs,omitempty"`
 	Launchpads   map[string][]string `json:"launchpads,omitempty"`
@@ -31,14 +38,17 @@ type legacyLaunchpadsFile struct {
 
 // --- Paths ---
 
-// configPaths returns (configJSON, legacyPlaintext) paths inside ~/.config/lo/.
-func configPaths() (string, string, error) {
+// configPaths returns (yamlPath, legacyJSONPath, legacyPlaintextPath) inside ~/.config/lo/.
+func configPaths() (string, string, string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	dir := filepath.Join(base, "lo")
-	return filepath.Join(dir, "config.json"), filepath.Join(dir, "config"), nil
+	return filepath.Join(dir, "config.yaml"),
+		filepath.Join(dir, "config.json"),
+		filepath.Join(dir, "config"),
+		nil
 }
 
 func legacyLaunchpadsPath() (string, error) {
@@ -52,11 +62,10 @@ func legacyLaunchpadsPath() (string, error) {
 // --- Load / Save ---
 
 // loadOrInitConfig loads existing config or runs the interactive setup on first use.
-func loadOrInitConfig(cfgPath, legacyPath string, in io.Reader, out io.Writer) (config, error) {
-	cfg, err := loadConfig(cfgPath, legacyPath)
+func loadOrInitConfig(cfgPath, jsonMigratePath, legacyPath string, in io.Reader, out io.Writer) (config, error) {
+	cfg, err := loadConfig(cfgPath, jsonMigratePath, legacyPath)
 	if err == nil {
-		dirs := effectiveProjectDirs(cfg)
-		if len(dirs) > 0 && allDirsExist(dirs) {
+		if len(cfg.Dirs) > 0 && allDirsExist(cfg.Dirs) {
 			return cfg, nil
 		}
 		fmt.Fprintln(out, "⚠️ Invalid config. Please choose valid directories.")
@@ -73,22 +82,41 @@ func loadOrInitConfig(cfgPath, legacyPath string, in io.Reader, out io.Writer) (
 	return cfg, nil
 }
 
-// loadConfig reads config from the JSON path or falls back to the legacy plaintext format.
-func loadConfig(cfgPath, legacyPath string) (config, error) {
-	var cfg config
-
+// loadConfig reads config from YAML, falling back to legacy JSON then plaintext.
+func loadConfig(cfgPath, jsonMigratePath, legacyPath string) (config, error) {
+	// 1. Try YAML (current format).
 	if data, err := os.ReadFile(cfgPath); err == nil {
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			return config{}, fmt.Errorf("invalid config json: %w", err)
+		var cfg config
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return config{}, fmt.Errorf("invalid config yaml: %w", err)
 		}
-		cfg.ProjectsDir = strings.TrimSpace(cfg.ProjectsDir)
-		cfg.ProjectsDirs = normalizeProjectDirs(cfg.ProjectsDirs)
+		cfg.Dirs = normalizeProjectDirs(cfg.Dirs)
 		if cfg.Launchpads == nil {
 			cfg.Launchpads = make(map[string][]string)
 		}
 		return cfg, nil
 	}
 
+	// 2. Migrate old config.json.
+	if data, err := os.ReadFile(jsonMigratePath); err == nil {
+		var legacy legacyJSONConfig
+		if err := json.Unmarshal(data, &legacy); err != nil {
+			return config{}, fmt.Errorf("invalid legacy config json: %w", err)
+		}
+		dirs := normalizeProjectDirs(legacy.ProjectsDirs)
+		if len(dirs) == 0 && strings.TrimSpace(legacy.ProjectsDir) != "" {
+			dirs = normalizeProjectDirs([]string{legacy.ProjectsDir})
+		}
+		if len(dirs) == 0 {
+			return config{}, errors.New("legacy config.json has no valid dirs")
+		}
+		if legacy.Launchpads == nil {
+			legacy.Launchpads = make(map[string][]string)
+		}
+		return config{Dirs: dirs, Launchpads: legacy.Launchpads}, nil
+	}
+
+	// 3. Migrate legacy plaintext (PROJECTS_DIR=...).
 	if data, err := os.ReadFile(legacyPath); err == nil {
 		line := strings.TrimSpace(string(data))
 		const key = "PROJECTS_DIR="
@@ -100,33 +128,28 @@ func loadConfig(cfgPath, legacyPath string) (config, error) {
 		if v == "" {
 			return config{}, errors.New("legacy config has empty PROJECTS_DIR")
 		}
-		cfg.ProjectsDir = v
-		cfg.ProjectsDirs = []string{v}
-		cfg.Launchpads = make(map[string][]string)
-		return cfg, nil
+		return config{Dirs: []string{v}, Launchpads: make(map[string][]string)}, nil
 	}
 
 	return config{}, errors.New("config not found")
 }
 
 func saveConfig(path string, cfg config) error {
-	dirs := effectiveProjectDirs(cfg)
+	dirs := normalizeProjectDirs(cfg.Dirs)
 	if len(dirs) == 0 {
 		return errors.New("projects dirs cannot be empty")
 	}
-	cfg.ProjectsDirs = dirs
-	cfg.ProjectsDir = dirs[0]
+	cfg.Dirs = dirs
 	if cfg.Launchpads == nil {
 		cfg.Launchpads = make(map[string][]string)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
+	b, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
-	b = append(b, '\n')
 	return os.WriteFile(path, b, 0o644)
 }
 
@@ -176,7 +199,7 @@ func migrateLegacyLaunchpads(cfgPath string, cfg *config, out io.Writer) error {
 	if err := saveConfig(cfgPath, *cfg); err != nil {
 		return fmt.Errorf("❌ could not migrate legacy launchpads: %w", err)
 	}
-	fmt.Fprintln(out, "✅ Migrated legacy launchpads into config.json")
+	fmt.Fprintln(out, "✅ Migrated legacy launchpads into config.yaml")
 	return nil
 }
 
@@ -198,7 +221,7 @@ func promptProjectsDirWithBubbleTea(current config, inFile, outFile *os.File) (c
 	if err != nil {
 		return config{}, fmt.Errorf("❌ could not resolve home directory: %w", err)
 	}
-	initialValue := strings.Join(effectiveProjectDirs(current), ", ")
+	initialValue := strings.Join(current.Dirs, ", ")
 
 	model := newProjectsDirPromptModel(home, initialValue)
 	p := tea.NewProgram(
@@ -220,7 +243,7 @@ func promptProjectsDirWithBubbleTea(current config, inFile, outFile *os.File) (c
 		return config{}, errors.New("❌ invalid directory")
 	}
 
-	return config{ProjectsDir: finalModel.selecteds[0], ProjectsDirs: finalModel.selecteds, Launchpads: current.Launchpads}, nil
+	return config{Dirs: finalModel.selecteds, Launchpads: current.Launchpads}, nil
 }
 
 func promptProjectsDirLine(current config, in io.Reader, out io.Writer) (config, error) {
@@ -230,7 +253,7 @@ func promptProjectsDirLine(current config, in io.Reader, out io.Writer) (config,
 	} else {
 		fmt.Fprintln(out, "📁 Enter your projects directories (comma-separated, relative to ~):")
 	}
-	currentDirs := strings.Join(effectiveProjectDirs(current), ", ")
+	currentDirs := strings.Join(current.Dirs, ", ")
 	if currentDirs != "" {
 		fmt.Fprintf(out, "Current: %s\n", currentDirs)
 	}
@@ -254,7 +277,7 @@ func promptProjectsDirLine(current config, in io.Reader, out io.Writer) (config,
 		return config{}, err
 	}
 
-	return config{ProjectsDir: projectsPaths[0], ProjectsDirs: projectsPaths, Launchpads: current.Launchpads}, nil
+	return config{Dirs: projectsPaths, Launchpads: current.Launchpads}, nil
 }
 
 // --- Path resolution helpers ---
@@ -347,18 +370,6 @@ func normalizeProjectDirs(dirs []string) []string {
 	return clean
 }
 
-// effectiveProjectDirs returns the resolved list of project root directories.
-func effectiveProjectDirs(cfg config) []string {
-	dirs := normalizeProjectDirs(cfg.ProjectsDirs)
-	if len(dirs) > 0 {
-		return dirs
-	}
-	if strings.TrimSpace(cfg.ProjectsDir) == "" {
-		return nil
-	}
-	return normalizeProjectDirs([]string{cfg.ProjectsDir})
-}
-
 func allDirsExist(dirs []string) bool {
 	for _, dir := range dirs {
 		st, err := os.Stat(dir)
@@ -367,4 +378,119 @@ func allDirsExist(dirs []string) bool {
 		}
 	}
 	return true
+}
+
+// --- Settings flow ---
+
+// runSettingsFlow shows the interactive settings TUI and handles all sub-flows.
+func runSettingsFlow(cfgPath, jsonMigratePath, legacyPath string, cfg *config, in io.Reader, out io.Writer) error {
+	inFile, inOk := in.(*os.File)
+	outFile, outOk := out.(*os.File)
+	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
+		// Non-TTY fallback: plaintext dir prompt.
+		updated, err := promptProjectsDirLine(*cfg, in, out)
+		if err != nil && err.Error() != "canceled" {
+			return err
+		}
+		if err == nil {
+			*cfg = updated
+			return saveConfig(cfgPath, *cfg)
+		}
+		return nil
+	}
+
+	for {
+		action, err := showSettingsMenu(*cfg, inFile, outFile)
+		if err != nil || action == "" {
+			return err
+		}
+
+		switch action {
+		case "dirs":
+			updated, err := promptProjectsDirWithBubbleTea(*cfg, inFile, outFile)
+			if err != nil {
+				if err.Error() == "canceled" {
+					continue
+				}
+				return err
+			}
+			updated.Launchpads = cfg.Launchpads
+			*cfg = updated
+			if err := saveConfig(cfgPath, *cfg); err != nil {
+				return fmt.Errorf("❌ failed saving config: %w", err)
+			}
+
+		case "launchpads":
+			if err := runLaunchpadSettingsFlow(cfgPath, cfg, inFile, outFile); err != nil && err.Error() != "back" {
+				return err
+			}
+		}
+	}
+}
+
+// runLaunchpadSettingsFlow manages launchpads from within the settings menu.
+func runLaunchpadSettingsFlow(cfgPath string, cfg *config, inFile, outFile *os.File) error {
+	if cfg.Launchpads == nil {
+		cfg.Launchpads = make(map[string][]string)
+	}
+
+	for {
+		action, name, err := showLaunchpadSettings(*cfg, inFile, outFile)
+		if err != nil || action == "back" {
+			return errors.New("back")
+		}
+
+		switch action {
+		case "new":
+			entries, loadErr := listProjects(cfg.Dirs)
+			if loadErr != nil {
+				return loadErr
+			}
+			projects := displayNames(entries)
+			selected, selErr := selectProjectsForLaunchpad(projects, nil,
+				fmt.Sprintf("🧩 New launchpad: %s", name), inFile, outFile)
+			if selErr != nil {
+				if selErr.Error() == "canceled" {
+					continue
+				}
+				return selErr
+			}
+			if len(selected) > 0 {
+				cfg.Launchpads[name] = selected
+				if err := saveConfig(cfgPath, *cfg); err != nil {
+					return err
+				}
+			}
+
+		case "edit":
+			entries, loadErr := listProjects(cfg.Dirs)
+			if loadErr != nil {
+				return loadErr
+			}
+			projects := displayNames(entries)
+			current := cfg.Launchpads[name]
+			updated, selErr := selectProjectsForLaunchpad(projects, current,
+				fmt.Sprintf("🛠  Edit: %s", name), inFile, outFile)
+			if selErr != nil {
+				if selErr.Error() == "canceled" {
+					continue
+				}
+				return selErr
+			}
+			if len(updated) == 0 {
+				delete(cfg.Launchpads, name)
+			} else {
+				cfg.Launchpads[name] = updated
+			}
+			if err := saveConfig(cfgPath, *cfg); err != nil {
+				return err
+			}
+
+		case "delete":
+			delete(cfg.Launchpads, name)
+			if err := saveConfig(cfgPath, *cfg); err != nil {
+				return err
+			}
+		}
+	}
 }
