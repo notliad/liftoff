@@ -191,7 +191,7 @@ func launchWithWatch(projectPath, projectName string, runCmd []string, _ io.Read
 
 // launchProjectsWatchMode opens each project in its own terminal window, each
 // running "lo --_watch-inline" to display the inline resource-monitor footer.
-func launchProjectsWatchMode(launchpadName string, projects []projectEntry, _ io.Reader, out io.Writer, errOut io.Writer) error {
+func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in io.Reader, out io.Writer, errOut io.Writer) error {
 	if len(projects) == 0 {
 		return errors.New("launchpad has no projects")
 	}
@@ -200,7 +200,7 @@ func launchProjectsWatchMode(launchpadName string, projects []projectEntry, _ io
 
 	launched := 0
 	for _, project := range projects {
-		target, installCmd, runCmd, err := detectProjectRunner(project.Path)
+		target, installCmd, runCmd, runDir, err := resolveProjectRunner(project, in, out)
 		if err != nil {
 			fmt.Fprintf(errOut, "warning: %s: %v\n", project.Name, err)
 			continue
@@ -208,14 +208,14 @@ func launchProjectsWatchMode(launchpadName string, projects []projectEntry, _ io
 
 		if len(installCmd) > 0 {
 			fmt.Fprintf(out, "Installing dependencies for %s...\n", project.Name)
-			if err := runCommandInDir(project.Path, installCmd, out, errOut); err != nil {
+			if err := runCommandInDir(runDir, installCmd, out, errOut); err != nil {
 				fmt.Fprintf(errOut, "warning: %s: install failed: %v\n", project.Name, err)
 				continue
 			}
 		}
 
 		fmt.Fprintf(out, "Launching %s with %s\n", project.Name, target)
-		termName, err := startInlineWatchTerminal(project.Name, project.Path, runCmd)
+		termName, err := startInlineWatchTerminal(project.Name, runDir, runCmd)
 		if err != nil {
 			fmt.Fprintf(errOut, "warning: %s: %v\n", project.Name, err)
 			continue

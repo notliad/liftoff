@@ -4,21 +4,26 @@ package main
 // all supported languages: Node.js, Rust, Go, Python, and Java.
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
+	"golang.org/x/term"
 )
 
 // --- Project manifest types ---
 
 type packageJSON struct {
+	Name         string            `json:"name"`
 	Scripts      map[string]string `json:"scripts"`
 	Dependencies map[string]string `json:"dependencies"`
 	DevDepends   map[string]string `json:"devDependencies"`
@@ -120,8 +125,11 @@ func previewNodeStack(projectPath string) string {
 // --- Main runner detection entry point ---
 
 // detectProjectRunner determines the target label, optional install command,
-// and run command for a given project directory.
-func detectProjectRunner(projectPath string) (target string, installCmd []string, runCmd []string, err error) {
+// and run command for a given project directory. If scriptOverride is non-empty
+// it is used as the npm script instead of auto-detecting dev/start.
+// in/out are passed through for interactive package-manager selection when no
+// lockfile is found; either may be nil for non-interactive callers.
+func detectProjectRunner(projectPath, scriptOverride string, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, err error) {
 	packageJSONPath := filepath.Join(projectPath, "package.json")
 	if _, statErr := os.Stat(packageJSONPath); statErr == nil {
 		pkg, readErr := loadPackageJSON(packageJSONPath)
@@ -129,12 +137,15 @@ func detectProjectRunner(projectPath string) (target string, installCmd []string
 			return "", nil, nil, readErr
 		}
 
-		script := detectScript(pkg)
+		script := scriptOverride
+		if script == "" {
+			script = detectScript(pkg)
+		}
 		if script == "" {
 			return "", nil, nil, errors.New("❌ no dev/start script found in package.json")
 		}
 
-		pm, install, run, pmErr := detectPackageManager(projectPath, script)
+		pm, install, run, pmErr := detectPackageManager(projectPath, script, in, out)
 		if pmErr != nil {
 			return "", nil, nil, pmErr
 		}
@@ -152,7 +163,12 @@ func detectProjectRunner(projectPath string) (target string, installCmd []string
 		if !hasCommand("cargo") {
 			return "", nil, nil, errors.New("❌ missing dependency: cargo. Install Rust toolchain and run again")
 		}
-		return "cargo (run)", nil, []string{"cargo", "run"}, nil
+		var install []string
+		// Fetch crates on first clone (no Cargo.lock yet).
+		if !fileExists(filepath.Join(projectPath, "Cargo.lock")) {
+			install = []string{"cargo", "fetch"}
+		}
+		return "cargo (run)", install, []string{"cargo", "run"}, nil
 	}
 
 	if isGoProject(projectPath) {
@@ -184,7 +200,7 @@ func loadPackageJSON(path string) (packageJSON, error) {
 	return pkg, nil
 }
 
-// detectScript returns "dev" or "start" if present, empty string otherwise.
+// detectScript returns the preferred npm script to run: dev, start, docs:dev, or storybook.
 func detectScript(pkg packageJSON) string {
 	if pkg.Scripts == nil {
 		return ""
@@ -194,6 +210,12 @@ func detectScript(pkg packageJSON) string {
 	}
 	if _, ok := pkg.Scripts["start"]; ok {
 		return "start"
+	}
+	if _, ok := pkg.Scripts["docs:dev"]; ok {
+		return "docs:dev"
+	}
+	if _, ok := pkg.Scripts["storybook"]; ok {
+		return "storybook"
 	}
 	return ""
 }
@@ -249,9 +271,28 @@ func detectNodeFramework(pkg packageJSON) string {
 		return "fastify"
 	case has("hono"):
 		return "hono"
+	case has("@docusaurus/core"):
+		return "docusaurus"
+	case has("vuepress") || has("@vuepress/core") || has("vuepress-vite"):
+		return "vuepress"
+	case hasStorybookDep(deps):
+		return "storybook"
 	default:
 		return "node"
 	}
+}
+
+// hasStorybookDep returns true when any @storybook/* package or the storybook CLI is present.
+func hasStorybookDep(deps map[string]struct{}) bool {
+	if _, ok := deps["storybook"]; ok {
+		return true
+	}
+	for k := range deps {
+		if strings.HasPrefix(k, "@storybook/") {
+			return true
+		}
+	}
+	return false
 }
 
 func detectPackageManagerFromLockfile(projectPath string) string {
@@ -269,7 +310,7 @@ func detectPackageManagerFromLockfile(projectPath string) string {
 	}
 }
 
-func detectPackageManager(projectPath, script string) (pm string, installCmd []string, runCmd []string, err error) {
+func detectPackageManager(projectPath, script string, in io.Reader, out io.Writer) (pm string, installCmd []string, runCmd []string, err error) {
 	type pmDef struct {
 		name    string
 		lock    string
@@ -294,7 +335,79 @@ func detectPackageManager(projectPath, script string) (pm string, installCmd []s
 		}
 	}
 
-	return "", nil, nil, errors.New("❌ no lockfile found (pnpm-lock.yaml, bun.lock*, package-lock.json, yarn.lock)")
+	// No lockfile — ask the user which package manager to use.
+	return promptNodePackageManager(script, in, out)
+}
+
+// promptNodePackageManager presents a numbered list of available Node.js package
+// managers and returns the user's choice. Falls back to the first available PM
+// when running non-interactively or only one option exists.
+func promptNodePackageManager(script string, in io.Reader, out io.Writer) (pm string, installCmd []string, runCmd []string, err error) {
+	type pmOpt struct {
+		name    string
+		install []string
+		run     []string
+	}
+
+	all := []pmOpt{
+		{"pnpm", []string{"pnpm", "install"}, []string{"pnpm", script}},
+		{"bun", []string{"bun", "install"}, []string{"bun", script}},
+		{"npm", []string{"npm", "install"}, []string{"npm", "run", script}},
+		{"yarn", []string{"yarn", "install"}, []string{"yarn", script}},
+	}
+
+	var available []pmOpt
+	for _, c := range all {
+		if hasCommand(c.name) {
+			available = append(available, c)
+		}
+	}
+
+	if len(available) == 0 {
+		return "", nil, nil, errors.New("❌ no Node.js package manager found. Install npm, pnpm, yarn, or bun and run again")
+	}
+
+	// Only one option or non-interactive: use the first available silently.
+	if len(available) == 1 {
+		c := available[0]
+		return c.name, c.install, c.run, nil
+	}
+
+	inFile, inOk := in.(*os.File)
+	outFile, outOk := out.(*os.File)
+	if !inOk || !outOk || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
+		c := available[0]
+		return c.name, c.install, c.run, nil
+	}
+
+	fmt.Fprintln(out, "⚠️  No lockfile found. Which package manager should be used?")
+	for i, c := range available {
+		fmt.Fprintf(out, "  %d) %s\n", i+1, c.name)
+	}
+	fmt.Fprint(out, "\n󰍉 Choice [1]: ")
+
+	reader := bufio.NewReader(in)
+	line, readErr := reader.ReadString('\n')
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		c := available[0]
+		return c.name, c.install, c.run, nil
+	}
+
+	line = strings.TrimSpace(line)
+	if line == "" {
+		c := available[0]
+		return c.name, c.install, c.run, nil
+	}
+
+	n, convErr := strconv.Atoi(line)
+	if convErr != nil || n < 1 || n > len(available) {
+		c := available[0]
+		fmt.Fprintf(out, "⚠️  Invalid choice, using %s\n", c.name)
+		return c.name, c.install, c.run, nil
+	}
+
+	c := available[n-1]
+	return c.name, c.install, c.run, nil
 }
 
 // --- Rust ---
@@ -386,15 +499,21 @@ func detectGoRunner(projectPath string) (target string, installCmd []string, run
 		return "", nil, nil, errors.New("❌ missing dependency: go. Install Go and run again")
 	}
 
+	// Download module dependencies when they are not vendored yet.
+	var install []string
+	if fileExists(filepath.Join(projectPath, "go.sum")) && !fileExists(filepath.Join(projectPath, "vendor")) {
+		install = []string{"go", "mod", "download"}
+	}
+
 	entry := detectGoEntryHint(projectPath)
 	framework := detectGoFramework(projectPath)
 
 	if strings.HasPrefix(entry, "go run ./cmd/") {
 		cmdPath := strings.TrimPrefix(entry, "go run ")
-		return fmt.Sprintf("go (%s)", framework), nil, []string{"go", "run", cmdPath}, nil
+		return fmt.Sprintf("go (%s)", framework), install, []string{"go", "run", cmdPath}, nil
 	}
 
-	return fmt.Sprintf("go (%s)", framework), nil, []string{"go", "run", "."}, nil
+	return fmt.Sprintf("go (%s)", framework), install, []string{"go", "run", "."}, nil
 }
 
 // --- Java ---
@@ -525,6 +644,10 @@ func isPythonProject(projectPath string) bool {
 		return true
 	}
 
+	if fileExists(filepath.Join(projectPath, "mkdocs.yml")) || fileExists(filepath.Join(projectPath, "mkdocs.yaml")) {
+		return true
+	}
+
 	pythonMarkers := []string{"main.py", "app.py", "manage.py", "wsgi.py"}
 	for _, marker := range pythonMarkers {
 		if fileExists(filepath.Join(projectPath, marker)) {
@@ -538,6 +661,10 @@ func isPythonProject(projectPath string) bool {
 func detectPythonFramework(projectPath string) string {
 	if fileExists(filepath.Join(projectPath, "manage.py")) {
 		return "django"
+	}
+
+	if fileExists(filepath.Join(projectPath, "mkdocs.yml")) || fileExists(filepath.Join(projectPath, "mkdocs.yaml")) {
+		return "mkdocs"
 	}
 
 	deps := make(map[string]struct{})
@@ -598,6 +725,14 @@ func detectPythonRunner(projectPath string) (target string, installCmd []string,
 
 	framework := detectPythonFramework(projectPath)
 
+	// MkDocs runs as a standalone command, not via the python interpreter.
+	if framework == "mkdocs" {
+		if !hasCommand("mkdocs") {
+			return "", nil, nil, errors.New("❌ missing dependency: mkdocs. Install with 'pip install mkdocs' and run again")
+		}
+		return "mkdocs (serve)", nil, entry, nil
+	}
+
 	if fileExists(filepath.Join(projectPath, "uv.lock")) && hasCommand("uv") {
 		run := append([]string{"uv", "run", "python"}, entry...)
 		return fmt.Sprintf("python (%s, uv)", framework), []string{"uv", "sync"}, run, nil
@@ -614,12 +749,21 @@ func detectPythonRunner(projectPath string) (target string, installCmd []string,
 		return fmt.Sprintf("python (%s)", framework), install, run, nil
 	}
 
+	// setup.py / pyproject.toml without a dedicated lockfile: editable install.
+	if fileExists(filepath.Join(projectPath, "setup.py")) || fileExists(filepath.Join(projectPath, "pyproject.toml")) {
+		install := []string{pythonCmd, "-m", "pip", "install", "-e", "."}
+		return fmt.Sprintf("python (%s)", framework), install, run, nil
+	}
+
 	return fmt.Sprintf("python (%s)", framework), nil, run, nil
 }
 
 func detectPythonEntrypoint(projectPath string) ([]string, error) {
 	if fileExists(filepath.Join(projectPath, "manage.py")) {
 		return []string{"manage.py", "runserver"}, nil
+	}
+	if fileExists(filepath.Join(projectPath, "mkdocs.yml")) || fileExists(filepath.Join(projectPath, "mkdocs.yaml")) {
+		return []string{"mkdocs", "serve"}, nil
 	}
 	if fileExists(filepath.Join(projectPath, "main.py")) {
 		return []string{"main.py"}, nil
@@ -782,3 +926,4 @@ func parsePythonDependencyName(raw string) string {
 	}
 	return strings.ToLower(raw)
 }
+

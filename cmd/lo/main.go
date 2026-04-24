@@ -170,7 +170,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	return launchProject(project.Path, project.Name, isWatchMode, in, out, errOut)
+	return launchProject(project, isWatchMode, in, out, errOut)
 }
 
 func writeUsage(w io.Writer) {

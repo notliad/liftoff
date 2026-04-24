@@ -70,10 +70,11 @@ bash install.sh --uninstall
 
 ### Node.js / JavaScript / TypeScript
 
-* Detects `package.json` with `dev` or `start` scripts
+* Detects `package.json` with `dev`, `start`, `docs:dev`, or `storybook` scripts
 * Automatically selects package manager via lockfile: `pnpm`, `bun`, `npm`, `yarn`
+* If no lockfile is found, **prompts interactively** to choose an available package manager
 * Framework hints:
-  Next.js, Nuxt, SvelteKit, Astro, NestJS, Remix, Vite, React, Vue, Angular, Express, Fastify, Hono
+  Next.js, Nuxt, SvelteKit, Astro, NestJS, Remix, Vite+React, Vite+Vue, Vite, React, Vue, Angular, Express, Fastify, Hono
 
 ### Rust
 
@@ -84,11 +85,11 @@ bash install.sh --uninstall
 
 ### Python
 
-* Detects `pyproject.toml`, `requirements.txt`, `setup.py`
+* Detects `pyproject.toml`, `requirements.txt`, `setup.py`, `mkdocs.yml`
 * Parses `pyproject.toml` for smarter detection
 * Execution strategy: `uv`, `poetry`, or `python` (`py` on Windows)
 * Framework hints:
-  FastAPI, Flask, Django, Streamlit, Gradio
+  FastAPI, Flask, Django, Streamlit, Gradio, MkDocs
 
 ### Java
 
@@ -104,6 +105,15 @@ bash install.sh --uninstall
 * Runs with `go run .` or `go run ./cmd/<name>`
 * Framework hints:
   Gin, Fiber, Echo, Chi, Temporal
+
+### Docs & Static Sites
+
+| Tool | Detection |
+|------|-----------|
+| **Docusaurus** | `@docusaurus/core` dependency |
+| **VuePress** | `vuepress` / `@vuepress/core` / `vuepress-vite` dependency, `docs:dev` script |
+| **MkDocs** | `mkdocs.yml` or `mkdocs.yaml` file; runs via `mkdocs serve` |
+| **Storybook** | `@storybook/*` packages or `storybook` CLI; appears as a **separate entry** in the project list alongside the main project |
 
 ## Usage
 

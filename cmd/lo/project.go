@@ -20,10 +20,11 @@ import (
 
 // projectEntry represents a discovered runnable project on disk.
 type projectEntry struct {
-	Name    string
-	Path    string
-	RootDir string
-	Display string // includes root hint when names collide across roots
+	Name           string
+	Path           string
+	RootDir        string
+	Display        string // includes root hint when names collide across roots
+	ScriptOverride string // when set, overrides the detected npm script (e.g. "storybook")
 }
 
 // --- Discovery ---
@@ -67,11 +68,13 @@ func listProjects(roots []string) ([]projectEntry, error) {
 		projects[i].Display = display
 	}
 
+	projects = addStorybookVariants(projects)
+
 	sort.Slice(projects, func(i, j int) bool {
-		if projects[i].Name == projects[j].Name {
+		if projects[i].Display == projects[j].Display {
 			return projects[i].RootDir < projects[j].RootDir
 		}
-		return projects[i].Name < projects[j].Name
+		return projects[i].Display < projects[j].Display
 	})
 
 	return projects, nil
@@ -104,14 +107,10 @@ func chooseProject(entries []projectEntry, query string, in io.Reader, out io.Wr
 				return entry, nil
 			}
 		}
-		matchingByName := make([]projectEntry, 0)
 		for _, entry := range entries {
 			if entry.Name == query {
-				matchingByName = append(matchingByName, entry)
+				return entry, nil
 			}
-		}
-		if len(matchingByName) == 1 {
-			return matchingByName[0], nil
 		}
 	}
 
@@ -129,7 +128,6 @@ func chooseProject(entries []projectEntry, query string, in io.Reader, out io.Wr
 	if !ok {
 		return projectEntry{}, fmt.Errorf("❌ selected project not found: %s", selected)
 	}
-
 	return entry, nil
 }
 
@@ -255,10 +253,50 @@ func filterProjects(projects []string, filter string) []string {
 
 // --- Stack preview ---
 
+// addStorybookVariants appends a separate storybook launch entry for every
+// already-disambiguated node project that declares a "storybook" script
+// alongside its primary dev/start script.
+func addStorybookVariants(projects []projectEntry) []projectEntry {
+	extras := make([]projectEntry, 0)
+	for _, p := range projects {
+		if p.ScriptOverride != "" {
+			continue
+		}
+		pkgPath := filepath.Join(p.Path, "package.json")
+		if !fileExists(pkgPath) {
+			continue
+		}
+		pkg, err := loadPackageJSON(pkgPath)
+		if err != nil || pkg.Scripts == nil {
+			continue
+		}
+		if _, hasStorybook := pkg.Scripts["storybook"]; !hasStorybook {
+			continue
+		}
+		// Only add a storybook variant when there is also a primary script.
+		// (A storybook-only project is already listed as-is.)
+		primary := detectScript(pkg)
+		if primary == "storybook" {
+			continue
+		}
+		variant := p
+		variant.ScriptOverride = "storybook"
+		variant.Display = p.Display + " (storybook)"
+		extras = append(extras, variant)
+	}
+	return append(projects, extras...)
+}
+
+// --- Stack preview ---
+
 func buildProjectStackMap(projects []projectEntry) map[string]string {
 	stackMap := make(map[string]string, len(projects))
 	for _, project := range projects {
-		stackMap[project.Display] = previewProjectStack(project.Path)
+		if project.ScriptOverride == "storybook" {
+			stackMap[project.Display] = "📖 storybook"
+		} else {
+			stackMap[project.Display] = previewProjectStack(project.Path)
+		}
 	}
 	return stackMap
 }
@@ -270,9 +308,14 @@ func listProjectsFlow(projects []projectEntry, out io.Writer) {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "PROJECT\tSTACK\tROOT")
 	for _, project := range projects {
-		stack := previewProjectStack(project.Path)
-		if strings.TrimSpace(stack) == "" {
-			stack = "-"
+		var stack string
+		if project.ScriptOverride == "storybook" {
+			stack = "📖 storybook"
+		} else {
+			stack = previewProjectStack(project.Path)
+			if strings.TrimSpace(stack) == "" {
+				stack = "-"
+			}
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\n", project.Display, stack, project.RootDir)
 	}
