@@ -5,7 +5,7 @@
 [![GitHub Forks](https://img.shields.io/github/forks/notliad/liftoff?style=flat&color=0891b2&logo=github&logoColor=white)](https://github.com/notliad/liftoff/network)
 [![GitHub License](https://img.shields.io/github/license/notliad/liftoff?style=flat&color=22c55e)](https://github.com/notliad/liftoff/blob/main/LICENSE)
 ![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Fnotliad%2Fliftoff&label=visitors&countColor=%230c7ebe&style=flat&labelStyle=none)
-![release](https://img.shields.io/github/v/release/notliad/liftoff) ![Go](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)
+![release](https://img.shields.io/github/v/release/notliad/liftoff) ![Go](https://img.shields.io/badge/GO-00ADD8?style=flat&logo=go&logoColor=black)
 
 </div>
 
