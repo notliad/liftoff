@@ -225,17 +225,17 @@ func resolveLaunchpadProjects(saved []string, entries []projectEntry) []projectE
 		}
 
 		if exact, ok := findProjectByDisplay(entries, item); ok {
-			if !used[exact.Path] {
+			if !used[exact.identityKey()] {
 				resolved = append(resolved, exact)
-				used[exact.Path] = true
+				used[exact.identityKey()] = true
 			}
 			continue
 		}
 
 		for _, entry := range entries {
-			if entry.Name == item && !used[entry.Path] {
+			if entry.Name == item && !used[entry.identityKey()] {
 				resolved = append(resolved, entry)
-				used[entry.Path] = true
+				used[entry.identityKey()] = true
 				break
 			}
 		}

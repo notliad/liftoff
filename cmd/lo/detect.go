@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -46,6 +47,11 @@ type pyprojectToml struct {
 	} `toml:"tool"`
 }
 
+const (
+	projectVariantStorybook = "storybook"
+	projectVariantCompose   = "compose"
+)
+
 // --- Runnability check ---
 
 // isRunnableProjectDir returns true if the directory looks like a launchable project.
@@ -78,6 +84,20 @@ func isRunnableProjectDir(projectPath string) bool {
 	}
 
 	return false
+}
+
+func hasComposeFile(projectPath string) bool {
+	_, ok := detectComposeFile(projectPath)
+	return ok
+}
+
+func detectComposeFile(projectPath string) (string, bool) {
+	for _, name := range []string{"docker-compose.yaml", "docker-compose.yml", "compose.yaml", "compose.yml"} {
+		if fileExists(filepath.Join(projectPath, name)) {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // --- Stack preview (shown in the picker) ---
@@ -129,7 +149,22 @@ func previewNodeStack(projectPath string) string {
 // it is used as the npm script instead of auto-detecting dev/start.
 // in/out are passed through for interactive package-manager selection when no
 // lockfile is found; either may be nil for non-interactive callers.
-func detectProjectRunner(projectPath, scriptOverride string, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, err error) {
+func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, err error) {
+	if variant == projectVariantCompose {
+		composeFile, ok := detectComposeFile(projectPath)
+		if !ok {
+			return "", nil, nil, errors.New("❌ no docker compose file found in project root")
+		}
+		if !hasCommand("docker") {
+			return "", nil, nil, errors.New("❌ missing dependency: docker. Install Docker and run again")
+		}
+		composeCheck := exec.Command("docker", "compose", "version")
+		if err := composeCheck.Run(); err != nil {
+			return "", nil, nil, errors.New("❌ missing dependency: docker compose. Install the Docker Compose plugin and run again")
+		}
+		return "docker compose", nil, []string{"docker", "compose", "-f", composeFile, "up", "-d", "--build", "--remove-orphans"}, nil
+	}
+
 	packageJSONPath := filepath.Join(projectPath, "package.json")
 	if _, statErr := os.Stat(packageJSONPath); statErr == nil {
 		pkg, readErr := loadPackageJSON(packageJSONPath)
@@ -183,7 +218,7 @@ func detectProjectRunner(projectPath, scriptOverride string, in io.Reader, out i
 		return detectPythonRunner(projectPath)
 	}
 
-	return "", nil, nil, errors.New("❌ unsupported project type. Expected package.json, Cargo.toml, go.mod, pom.xml/build.gradle, pyproject.toml or .py entrypoint")
+	return "", nil, nil, errors.New("❌ unsupported project type. Expected package.json, Cargo.toml, go.mod, pom.xml/build.gradle, pyproject.toml, .py entrypoint, or docker compose file")
 }
 
 // --- Node.js ---
@@ -926,4 +961,3 @@ func parsePythonDependencyName(raw string) string {
 	}
 	return strings.ToLower(raw)
 }
-

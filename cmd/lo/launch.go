@@ -17,7 +17,7 @@ import (
 // and working directory for the given project. in/out are forwarded for interactive
 // package-manager selection when no lockfile is present.
 func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, runDir string, err error) {
-	target, installCmd, runCmd, err = detectProjectRunner(project.Path, project.ScriptOverride, in, out)
+	target, installCmd, runCmd, err = detectProjectRunner(project.Path, project.Variant, project.ScriptOverride, in, out)
 	runDir = project.Path
 	return
 }

@@ -1,8 +1,12 @@
-.TH LO 1 "April 2026" "lo 0.3.0" "User Commands"
+.TH LO 1 "April 2026" "lo 0.6.0" "User Commands"
 .SH NAME
-lo \- launch Node/Bun/Rust/Python/Java/Go projects quickly for development
+lo \- launch Node/Bun/Rust/Python/Java/Go/Docker Compose projects quickly for development
 .SH SYNOPSIS
 .B lo
+.RI [ project-name ]
+.br
+.B lo
+.B compose
 .RI [ project-name ]
 .br
 .B lo
@@ -38,6 +42,9 @@ lo \- launch Node/Bun/Rust/Python/Java/Go projects quickly for development
 is a Go CLI that speeds up daily frontend/backend development workflows.
 It finds your project, detects package manager and script, installs dependencies
 if needed, and launches your dev process in a detached terminal.
+.br
+When a project root contains a supported Docker Compose file, lo also exposes a
+separate compose entry for that root.
 .PP
 When no project name is provided, lo opens a Bubble Tea interactive project list:
 .IP \[bu] 2
@@ -53,6 +60,17 @@ Configuration prompt (first run and
 .B --edit )
 also uses Bubble Tea when terminal UI is available.
 .SH OPTIONS
+.TP
+.B compose [project-name]
+Launch Docker Compose for a discovered project root using:
+.br
+.B docker compose up -d --build --remove-orphans
+.br
+Supported files:
+.B docker-compose.yaml,
+.B docker-compose.yml,
+.B compose.yaml,
+.B compose.yml
 .TP
 .B --edit
 Configure one or more projects root directories (comma-separated) and save them to config.
@@ -107,6 +125,9 @@ list launchpads, or show projects for one launchpad.
 .PP
 Launchpads are stored in the same config file:
 .B ~/.config/lo/config.json
+.PP
+Compose entries are saved and resolved independently, so a launchpad can include
+both a project's main runtime and its compose variant.
 .SH GO SUPPORT
 If
 .B go.mod
@@ -146,6 +167,22 @@ scripts in this order:
 .B start
 .PP
 If neither exists, lo exits with an error.
+.SH DOCKER COMPOSE SUPPORT
+If a project root contains one of the supported compose files, lo exposes a
+separate project entry labeled with
+.B (compose)
+and runs:
+.PP
+.EX
+docker compose up -d --build --remove-orphans
+.EE
+.PP
+When multiple configured roots contain the same project name, use the exact
+disambiguated name shown by
+.B lo --list
+with the
+.B compose
+subcommand.
 .SH RUST SUPPORT
 If
 .B Cargo.toml
@@ -263,6 +300,12 @@ Start by exact project name:
 .PP
 .EX
 lo api
+.EE
+.PP
+Start Docker Compose for a project root:
+.PP
+.EX
+lo compose api
 .EE
 .PP
 Open interactive selector:

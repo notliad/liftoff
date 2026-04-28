@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -90,6 +90,20 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 	}
 
 	remaining := fs.Args()
+	if len(remaining) > 0 && remaining[0] == "compose" {
+		if isPadMode || isListMode || isEdit || isSettings || isWatchMode {
+			return errors.New("❌ usage: lo compose [project-name]")
+		}
+		if len(remaining) > 2 {
+			return errors.New("❌ usage: lo compose [project-name]")
+		}
+		query := ""
+		if len(remaining) == 2 {
+			query = strings.TrimSpace(remaining[1])
+		}
+		return runComposeFlow(cfg, query, in, out, errOut)
+	}
+
 	if isPadMode && isListMode {
 		padName := ""
 		if len(remaining) > 1 {
@@ -164,6 +178,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 
 	fmt.Fprintln(tw, "  lo [project-name]\tlaunch a project")
+	fmt.Fprintln(tw, "  lo compose [project-name]\tlaunch docker compose for a project")
 	fmt.Fprintln(tw, "  lo --list, -l\tlist projects")
 	fmt.Fprintln(tw, "")
 	fmt.Fprintln(tw, "  lo --pad, -p [launchpad]\tcreate/run a launchpad*")
@@ -180,4 +195,64 @@ func writeUsage(w io.Writer) {
 
 	tw.Flush()
 	fmt.Fprintln(w, "")
+}
+
+func runComposeFlow(cfg config, query string, in io.Reader, out io.Writer, errOut io.Writer) error {
+	projectEntries, err := listProjects(cfg.Dirs)
+	if err != nil {
+		return err
+	}
+
+	composeEntries := filterProjectEntries(projectEntries, projectVariantCompose)
+	if len(composeEntries) == 0 {
+		return errors.New("⚠️ no docker compose projects found")
+	}
+
+	project, err := chooseComposeProject(composeEntries, query, in, out)
+	if err != nil {
+		return err
+	}
+
+	return launchProject(project, false, in, out, errOut)
+}
+
+func filterProjectEntries(entries []projectEntry, variant string) []projectEntry {
+	filtered := make([]projectEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Variant == variant {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func chooseComposeProject(entries []projectEntry, query string, in io.Reader, out io.Writer) (projectEntry, error) {
+	query = strings.TrimSpace(query)
+	if query != "" {
+		for _, entry := range entries {
+			if entry.Display == query {
+				return entry, nil
+			}
+		}
+
+		baseQuery := strings.TrimSuffix(query, " (compose)")
+		matches := make([]projectEntry, 0)
+		for _, entry := range entries {
+			if entry.Name == query || entry.Name == baseQuery || strings.TrimSuffix(entry.Display, " (compose)") == query {
+				matches = append(matches, entry)
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0], nil
+		}
+		if len(matches) > 1 {
+			options := make([]string, 0, len(matches))
+			for _, match := range matches {
+				options = append(options, match.Display)
+			}
+			return projectEntry{}, fmt.Errorf("❌ multiple compose projects match %q: %s", query, strings.Join(options, ", "))
+		}
+	}
+
+	return chooseProject(entries, query, in, out)
 }
