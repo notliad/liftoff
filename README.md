@@ -23,6 +23,7 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 * **Launchpads**: group multiple projects and start them together
 * **Watch Mode**: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
+* Docker Compose support
 
 ## Installation
 
@@ -70,10 +71,11 @@ bash install.sh --uninstall
 
 ### Node.js / JavaScript / TypeScript
 
-* Detects `package.json` with `dev` or `start` scripts
+* Detects `package.json` with `dev`, `start`, `docs:dev`, or `storybook` scripts
 * Automatically selects package manager via lockfile: `pnpm`, `bun`, `npm`, `yarn`
+* If no lockfile is found, **prompts interactively** to choose an available package manager
 * Framework hints:
-  Next.js, Nuxt, SvelteKit, Astro, NestJS, Remix, Vite, React, Vue, Angular, Express, Fastify, Hono
+  Next.js, Nuxt, SvelteKit, Astro, NestJS, Remix, Vite+React, Vite+Vue, Vite, React, Vue, Angular, Express, Fastify, Hono
 
 ### Rust
 
@@ -84,11 +86,11 @@ bash install.sh --uninstall
 
 ### Python
 
-* Detects `pyproject.toml`, `requirements.txt`, `setup.py`
+* Detects `pyproject.toml`, `requirements.txt`, `setup.py`, `mkdocs.yml`
 * Parses `pyproject.toml` for smarter detection
 * Execution strategy: `uv`, `poetry`, or `python` (`py` on Windows)
 * Framework hints:
-  FastAPI, Flask, Django, Streamlit, Gradio
+  FastAPI, Flask, Django, Streamlit, Gradio, MkDocs
 
 ### Java
 
@@ -105,44 +107,49 @@ bash install.sh --uninstall
 * Framework hints:
   Gin, Fiber, Echo, Chi, Temporal
 
+### Docs & Static Sites
+
+| Tool | Detection |
+|------|-----------|
+| **Docusaurus** | `@docusaurus/core` dependency |
+| **VuePress** | `vuepress` / `@vuepress/core` / `vuepress-vite` dependency, `docs:dev` script |
+| **MkDocs** | `mkdocs.yml` or `mkdocs.yaml` file; runs via `mkdocs serve` |
+| **Storybook** | `@storybook/*` packages or `storybook` CLI; appears as a **separate entry** in the project list alongside the main project |
+| **Docker Compose** | `docker-compose.yaml`, `docker-compose.yml`, `compose.yaml`, or `compose.yml`; appears as a **separate entry** and runs `docker compose up -d --build --remove-orphans` |
+
 ## Usage
 
 ```bash
+lo                     # select project on list
 lo [project-name]      # run a project
+lo compose             # select compose on list
+lo compose [name]      # run docker compose for a project root
 lo --list, -l          # list projects
 lo --pad, -p [name]    # run/create a launchpad
 lo --pad --list        # list your launchpads
 lo --pad --list [name] # list projects of a launchpad
 lo --pad --edit [name] # edit your launchpad
-lo --edit, -e          # edit your directories
 lo --watch, -w [name]  # run project in watch mode
-lo --print-config, -c  # display current directories
-lo --help              # i need somebody :)
-lo --version           # display version
+lo --settings, -s      # open settings menu
+lo --help, -h          # i need somebody :)
+lo --version, -v       # display version
 ```
 
 ### First run
 
-On first run, `lo` asks for your projects directories (comma-separated) and saves them to:
+On first run, `lo` asks for your projects directories  and saves them to:
 
-* `~/.config/lo/config.json`
+* `~/.config/lo/config.yaml`
 
 Example value:
 
-```json
-{
-  "projectsDir": "/home/you/Projects",
-  "projectsDirs": [
-    "/home/you/Projects",
-    "/home/you/Work"
-  ],
-  "launchpads": {
-    "my-work": [
-      "api",
-      "web"
-    ]
-  }
-}
+```yaml
+dirs:
+    - /home/you/Projects
+launchpads:
+    my-works:
+        - api
+        - web
 ```
 
 ## Recommended shell setup

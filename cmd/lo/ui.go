@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -559,4 +560,325 @@ func (m *projectChecklistModel) ensureCursorBounds() {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+}
+
+// --- Settings menu ---
+
+// settingsMenuModel shows the top-level settings options.
+type settingsMenuModel struct {
+	cfg      config
+	cursor   int
+	selected string
+	canceled bool
+}
+
+func newSettingsMenuModel(cfg config) *settingsMenuModel {
+	return &settingsMenuModel{cfg: cfg}
+}
+
+func (m *settingsMenuModel) Init() tea.Cmd { return nil }
+
+func (m *settingsMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	const maxItem = 1
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc", "q":
+			m.canceled = true
+			return m, tea.Quit
+		case "up", "k", "ctrl+p":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j", "ctrl+n":
+			if m.cursor < maxItem {
+				m.cursor++
+			}
+		case "enter":
+			switch m.cursor {
+			case 0:
+				m.selected = "dirs"
+			case 1:
+				m.selected = "launchpads"
+			}
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m *settingsMenuModel) View() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
+	b.WriteString("\n\n")
+	b.WriteString(" " + promptStyle.Render("⚙  Settings"))
+	b.WriteString("\n\n")
+
+	type item struct {
+		icon   string
+		label  string
+		detail string
+	}
+	items := []item{
+		{
+			icon:   "📁",
+			label:  "Project Directories",
+			detail: settingsDirsDetail(m.cfg),
+		},
+		{
+			icon:   "🧩",
+			label:  "Launchpads",
+			detail: settingsLaunchpadsDetail(m.cfg),
+		},
+	}
+
+	sepLen := 52
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n")
+
+	for i, it := range items {
+		isSelected := m.cursor == i
+		prefix := "  "
+		if isSelected {
+			prefix = selectedStyle.Render("❯ ")
+		}
+		var label string
+		if isSelected {
+			label = lipgloss.NewStyle().Bold(true).Render(it.icon + "  " + it.label)
+		} else {
+			label = it.icon + "  " + it.label
+		}
+		b.WriteString("\n")
+		b.WriteString(" " + prefix + label)
+		b.WriteString("\n")
+		b.WriteString("      " + mutedStyle.Render(it.detail))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+	b.WriteString(" " + mutedStyle.Render("↑↓ navigate  ·  ⏎ edit  ·  esc exit"))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func settingsDirsDetail(cfg config) string {
+	if len(cfg.Dirs) == 0 {
+		return "not configured"
+	}
+	return strings.Join(cfg.Dirs, ", ")
+}
+
+func settingsLaunchpadsDetail(cfg config) string {
+	n := len(cfg.Launchpads)
+	switch n {
+	case 0:
+		return "none"
+	case 1:
+		return "1 launchpad"
+	default:
+		return fmt.Sprintf("%d launchpads", n)
+	}
+}
+
+// showSettingsMenu opens the settings menu TUI and returns the chosen action key.
+// Returns "" when the user exits without selecting.
+func showSettingsMenu(cfg config, inFile, outFile *os.File) (string, error) {
+	model := newSettingsMenuModel(cfg)
+	p := tea.NewProgram(model, tea.WithInput(inFile), tea.WithOutput(outFile), tea.WithAltScreen())
+	result, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+	m, ok := result.(*settingsMenuModel)
+	if !ok || m == nil || m.canceled {
+		return "", nil
+	}
+	return m.selected, nil
+}
+
+// --- Launchpad settings list ---
+
+type launchpadListItem struct {
+	name  string
+	count int
+	isNew bool
+}
+
+// launchpadListModel lists existing launchpads and allows edit/delete/create.
+type launchpadListModel struct {
+	cfg       config
+	items     []launchpadListItem
+	cursor    int
+	// inline name-input for "new launchpad"
+	naming    bool
+	nameInput textinput.Model
+	// result
+	action   string
+	selected string
+	back     bool
+}
+
+func newLaunchpadListModel(cfg config) *launchpadListModel {
+	names := sortedMapKeys(cfg.Launchpads)
+	items := make([]launchpadListItem, 0, len(names)+1)
+	for _, name := range names {
+		items = append(items, launchpadListItem{name: name, count: len(cfg.Launchpads[name])})
+	}
+	items = append(items, launchpadListItem{isNew: true, name: "＋  New launchpad"})
+
+	ti := textinput.New()
+	ti.Placeholder = "launchpad-name"
+	ti.CharLimit = 64
+	ti.Width = 30
+
+	return &launchpadListModel{
+		cfg:       cfg,
+		items:     items,
+		nameInput: ti,
+	}
+}
+
+func (m *launchpadListModel) Init() tea.Cmd { return nil }
+
+func (m *launchpadListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.naming {
+		return m.updateNaming(msg)
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			m.back = true
+			return m, tea.Quit
+		case "up", "k", "ctrl+p":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j", "ctrl+n":
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		case "enter":
+			item := m.items[m.cursor]
+			if item.isNew {
+				m.naming = true
+				m.nameInput.Reset()
+				m.nameInput.Focus()
+				return m, textinput.Blink
+			}
+			m.action = "edit"
+			m.selected = item.name
+			return m, tea.Quit
+		case "d":
+			item := m.items[m.cursor]
+			if !item.isNew {
+				m.action = "delete"
+				m.selected = item.name
+				return m, tea.Quit
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *launchpadListModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			m.naming = false
+			m.nameInput.Blur()
+			return m, nil
+		case "enter":
+			name := strings.TrimSpace(m.nameInput.Value())
+			if name == "" {
+				m.naming = false
+				return m, nil
+			}
+			m.action = "new"
+			m.selected = name
+			return m, tea.Quit
+		}
+	}
+	var cmd tea.Cmd
+	m.nameInput, cmd = m.nameInput.Update(msg)
+	return m, cmd
+}
+
+func (m *launchpadListModel) View() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
+	b.WriteString("\n\n")
+	b.WriteString(" " + promptStyle.Render("🧩  Launchpads"))
+	b.WriteString("\n\n")
+
+	sepLen := 44
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n")
+
+	for i, item := range m.items {
+		isSelected := m.cursor == i
+		prefix := "  "
+		if isSelected {
+			prefix = selectedStyle.Render("❯ ")
+		}
+
+		if item.isNew {
+			if isSelected {
+				b.WriteString(prefix + promptStyle.Render(item.name))
+			} else {
+				b.WriteString(prefix + mutedStyle.Render(item.name))
+			}
+		} else {
+			countStr := fmt.Sprintf("  (%d)", item.count)
+			if isSelected {
+				b.WriteString(prefix + lipgloss.NewStyle().Bold(true).Render(item.name) + mutedStyle.Render(countStr))
+			} else {
+				b.WriteString(prefix + item.name + mutedStyle.Render(countStr))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+
+	if m.naming {
+		b.WriteString(" " + promptStyle.Render("Name: "))
+		b.WriteString(m.nameInput.View())
+		b.WriteString("\n\n")
+		b.WriteString(" " + mutedStyle.Render("⏎ create  ·  esc cancel"))
+	} else {
+		hint := "↑↓ navigate  ·  ⏎ edit  ·  d delete  ·  esc back"
+		if len(m.items) == 1 {
+			hint = "⏎ create first launchpad  ·  esc back"
+		}
+		b.WriteString(" " + mutedStyle.Render(hint))
+	}
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+// showLaunchpadSettings opens the launchpad list TUI and returns the chosen action.
+func showLaunchpadSettings(cfg config, inFile, outFile *os.File) (action, name string, err error) {
+	model := newLaunchpadListModel(cfg)
+	p := tea.NewProgram(model, tea.WithInput(inFile), tea.WithOutput(outFile), tea.WithAltScreen())
+	result, runErr := p.Run()
+	if runErr != nil {
+		return "", "", runErr
+	}
+	m, ok := result.(*launchpadListModel)
+	if !ok || m == nil || m.back {
+		return "back", "", nil
+	}
+	return m.action, m.selected, nil
 }

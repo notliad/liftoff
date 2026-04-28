@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-const version = "0.4.2"
+const version = "0.5.0"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -40,14 +40,14 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 	showHelpShort := fs.Bool("h", false, "show help")
 	showVersion := fs.Bool("version", false, "show version")
 	showVersionShort := fs.Bool("v", false, "show version")
-	editConfig := fs.Bool("edit", false, "edit projects dir")
-	editConfigShort := fs.Bool("e", false, "edit")
-	printConfig := fs.Bool("print-config", false, "print config")
-	printConfigShort := fs.Bool("c", false, "print config")
+	settingsMode := fs.Bool("settings", false, "open settings")
+	settingsModeShort := fs.Bool("s", false, "open settings")
 	padMode := fs.Bool("pad", false, "launchpad mode")
 	padModeShort := fs.Bool("p", false, "launchpad mode")
 	listMode := fs.Bool("list", false, "list mode")
 	listModeShort := fs.Bool("l", false, "list mode")
+	editMode := fs.Bool("edit", false, "edit launchpad")
+	editModeShort := fs.Bool("e", false, "edit launchpad")
 	watchMode := fs.Bool("watch", false, "watch mode")
 	watchModeShort := fs.Bool("w", false, "watch mode")
 
@@ -65,31 +65,23 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return nil
 	}
 
-	isEdit := *editConfig || *editConfigShort
-	isPrintConfig := *printConfig || *printConfigShort
+	isSettings := *settingsMode || *settingsModeShort
 	isPadMode := *padMode || *padModeShort
 	isListMode := *listMode || *listModeShort
+	isEdit := *editMode || *editModeShort
 	isWatchMode := *watchMode || *watchModeShort
 
-	cfgPath, legacyPath, err := configPaths()
+	cfgPath, jsonMigratePath, legacyPath, err := configPaths()
 	if err != nil {
 		return fmt.Errorf("❌ could not resolve config path: %w", err)
 	}
-	if isEdit && !isPadMode {
-		existingCfg, _ := loadConfig(cfgPath, legacyPath)
-		cfg, err := promptProjectsDir(existingCfg, in, out)
-		if err != nil {
-			return err
-		}
-		cfg.Launchpads = existingCfg.Launchpads
-		if err := saveConfig(cfgPath, cfg); err != nil {
-			return fmt.Errorf("❌ failed saving config: %w", err)
-		}
-		fmt.Fprintf(out, "✅ Saved config to %s\n", cfgPath)
-		return nil
+
+	if isSettings && !isPadMode {
+		existingCfg, _ := loadConfig(cfgPath, jsonMigratePath, legacyPath)
+		return runSettingsFlow(cfgPath, jsonMigratePath, legacyPath, &existingCfg, in, out)
 	}
 
-	cfg, err := loadOrInitConfig(cfgPath, legacyPath, in, out)
+	cfg, err := loadOrInitConfig(cfgPath, jsonMigratePath, legacyPath, in, out)
 	if err != nil {
 		return err
 	}
@@ -97,13 +89,21 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	if isPrintConfig {
-		dirs := effectiveProjectDirs(cfg)
-		fmt.Fprintf(out, "📁 %s\n", strings.Join(dirs, ", "))
-		return nil
+	remaining := fs.Args()
+	if len(remaining) > 0 && remaining[0] == "compose" {
+		if isPadMode || isListMode || isEdit || isSettings || isWatchMode {
+			return errors.New("❌ usage: lo compose [project-name]")
+		}
+		if len(remaining) > 2 {
+			return errors.New("❌ usage: lo compose [project-name]")
+		}
+		query := ""
+		if len(remaining) == 2 {
+			query = strings.TrimSpace(remaining[1])
+		}
+		return runComposeFlow(cfg, query, in, out, errOut)
 	}
 
-	remaining := fs.Args()
 	if isPadMode && isListMode {
 		padName := ""
 		if len(remaining) > 1 {
@@ -115,15 +115,14 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return listLaunchpadsFlow(cfg, padName, out)
 	}
 
-	projectDirs := effectiveProjectDirs(cfg)
 	fmt.Fprintf(out, "\n🚀 Liftoff\n\n")
 
-	projectEntries, err := listProjects(projectDirs)
+	projectEntries, err := listProjects(cfg.Dirs)
 	if err != nil {
 		return err
 	}
 	if len(projectEntries) == 0 {
-		return fmt.Errorf("⚠️ no projects found in %s", strings.Join(projectDirs, ", "))
+		return fmt.Errorf("⚠️ no projects found in %s", strings.Join(cfg.Dirs, ", "))
 	}
 
 	if isPadMode {
@@ -170,7 +169,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	return launchProject(project.Path, project.Name, isWatchMode, in, out, errOut)
+	return launchProject(project, isWatchMode, in, out, errOut)
 }
 
 func writeUsage(w io.Writer) {
@@ -179,15 +178,16 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 
 	fmt.Fprintln(tw, "  lo [project-name]\tlaunch a project")
+	fmt.Fprintln(tw, "  lo compose [project-name]\tlaunch docker compose for a project")
 	fmt.Fprintln(tw, "  lo --list, -l\tlist projects")
 	fmt.Fprintln(tw, "")
-	fmt.Fprintln(tw, "  lo --pad [name]\tcreate/run a launchpad*")
-	fmt.Fprintln(tw, "  lo --pad --list [name]\tlist launchpads")
-	fmt.Fprintln(tw, "  lo --pad --edit [name]\tedit a launchpad")
+	fmt.Fprintln(tw, "  lo --pad, -p [launchpad]\tcreate/run a launchpad*")
+	fmt.Fprintln(tw, "  lo --pad, -p --list [launchpad]\tlist launchpads")
+	fmt.Fprintln(tw, "  lo --pad, -p --edit [launchpad]\tedit a launchpad")
 	fmt.Fprintln(tw, "")
-	fmt.Fprintln(tw, "  lo --edit, -e\tchange projects directories")
-	fmt.Fprintln(tw, "  lo --watch, -w\trun in watch mode and monitors project resources")
-	fmt.Fprintln(tw, "  lo --print-config, -c\tdisplay current directories")
+	fmt.Fprintln(tw, "  lo --settings, -s\topen settings")
+	fmt.Fprintln(tw, "  lo --watch, -w [project-name]\trun in watch mode and monitor project resources")
+	fmt.Fprintln(tw, "  lo --watch --pad, -w -p [launchpad]\trun a launchpad in watch mode with real-time monitoring")
 	fmt.Fprintln(tw, "  lo --version, -v\tdisplay version")
 	fmt.Fprintln(tw, "  lo --help, -h\tshow this :)")
 	fmt.Fprintln(tw, "")
@@ -195,4 +195,64 @@ func writeUsage(w io.Writer) {
 
 	tw.Flush()
 	fmt.Fprintln(w, "")
+}
+
+func runComposeFlow(cfg config, query string, in io.Reader, out io.Writer, errOut io.Writer) error {
+	projectEntries, err := listProjects(cfg.Dirs)
+	if err != nil {
+		return err
+	}
+
+	composeEntries := filterProjectEntries(projectEntries, projectVariantCompose)
+	if len(composeEntries) == 0 {
+		return errors.New("⚠️ no docker compose projects found")
+	}
+
+	project, err := chooseComposeProject(composeEntries, query, in, out)
+	if err != nil {
+		return err
+	}
+
+	return launchProject(project, false, in, out, errOut)
+}
+
+func filterProjectEntries(entries []projectEntry, variant string) []projectEntry {
+	filtered := make([]projectEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Variant == variant {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func chooseComposeProject(entries []projectEntry, query string, in io.Reader, out io.Writer) (projectEntry, error) {
+	query = strings.TrimSpace(query)
+	if query != "" {
+		for _, entry := range entries {
+			if entry.Display == query {
+				return entry, nil
+			}
+		}
+
+		baseQuery := strings.TrimSuffix(query, " (compose)")
+		matches := make([]projectEntry, 0)
+		for _, entry := range entries {
+			if entry.Name == query || entry.Name == baseQuery || strings.TrimSuffix(entry.Display, " (compose)") == query {
+				matches = append(matches, entry)
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0], nil
+		}
+		if len(matches) > 1 {
+			options := make([]string, 0, len(matches))
+			for _, match := range matches {
+				options = append(options, match.Display)
+			}
+			return projectEntry{}, fmt.Errorf("❌ multiple compose projects match %q: %s", query, strings.Join(options, ", "))
+		}
+	}
+
+	return chooseProject(entries, query, in, out)
 }
