@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-const version = "0.6.0"
+const version = "0.5.0"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
