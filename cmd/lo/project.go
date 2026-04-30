@@ -130,6 +130,22 @@ func findProjectByDisplay(entries []projectEntry, display string) (projectEntry,
 
 // --- Selection ---
 
+// findProject silently looks up a project by display name or name without
+// opening the interactive picker. Returns the entry and true if found.
+func findProject(entries []projectEntry, query string) (projectEntry, bool) {
+	for _, entry := range entries {
+		if entry.Display == query {
+			return entry, true
+		}
+	}
+	for _, entry := range entries {
+		if entry.Name == query {
+			return entry, true
+		}
+	}
+	return projectEntry{}, false
+}
+
 // chooseProject matches a direct query or opens the interactive picker.
 func chooseProject(entries []projectEntry, query string, in io.Reader, out io.Writer) (projectEntry, error) {
 	if query != "" {

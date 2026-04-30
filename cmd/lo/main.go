@@ -156,7 +156,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 	}
 
 	if len(remaining) > 1 {
-		return errors.New("❌ usage: lo [project-name]")
+		return errors.New("❌ usage: lo [name]")
 	}
 
 	query := ""
@@ -164,7 +164,19 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		query = strings.TrimSpace(remaining[0])
 	}
 
-	project, err := chooseProject(projectEntries, query, in, out)
+	if query != "" {
+		if project, ok := findProject(projectEntries, query); ok {
+			return launchProject(project, isWatchMode, in, out, errOut)
+		}
+
+		if _, exists := cfg.Launchpads[query]; exists {
+			return runLaunchpadFlow(cfgPath, &cfg, projectEntries, query, isWatchMode, in, out, errOut)
+		}
+
+		return fmt.Errorf("❌ project or launchpad not found: %s", query)
+	}
+
+	project, err := chooseProject(projectEntries, "", in, out)
 	if err != nil {
 		return err
 	}
@@ -177,7 +189,7 @@ func writeUsage(w io.Writer) {
 
 	fmt.Fprintln(w, "Usage:")
 
-	fmt.Fprintln(tw, "  lo [project-name]\tlaunch a project")
+  fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
 	fmt.Fprintln(tw, "  lo compose [project-name]\tlaunch docker compose for a project")
 	fmt.Fprintln(tw, "  lo --list, -l\tlist projects")
 	fmt.Fprintln(tw, "")
