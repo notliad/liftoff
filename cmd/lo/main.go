@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-const version = "0.5.0"
+const version = "0.5.1"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -189,7 +189,7 @@ func writeUsage(w io.Writer) {
 
 	fmt.Fprintln(w, "Usage:")
 
-  fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
+  	fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
 	fmt.Fprintln(tw, "  lo compose [project-name]\tlaunch docker compose for a project")
 	fmt.Fprintln(tw, "  lo --list, -l\tlist projects")
 	fmt.Fprintln(tw, "")
