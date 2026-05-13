@@ -228,6 +228,7 @@ func promptProjectsDirWithBubbleTea(current config, inFile, outFile *os.File) (c
 		model,
 		tea.WithInput(inFile),
 		tea.WithOutput(outFile),
+		tea.WithAltScreen(),
 	)
 
 	result, err := p.Run()
