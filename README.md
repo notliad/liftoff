@@ -27,15 +27,25 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 
 ## Installation
 
-### Linux / macOS
+### Quick Install (Linux / macOS)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash
 ```
 
-### Arch Linux (AUR)
+### Windows (PowerShell)
 
-You can install **lo** directly from the AUR using an AUR helper like `yay` or `paru`:
+```powershell
+irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex
+```
+
+### Go Install
+
+```bash
+go install github.com/notliad/liftoff/cmd/lo@latest
+```
+
+### Arch Linux (AUR)
 
 ```bash
 yay -S liftoff
@@ -47,24 +57,19 @@ or
 paru -S liftoff
 ```
 
-### Windows (PowerShell)
-
-```powershell
-irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex
-```
-
-### Build from source (requires Go 1.22+)
+### Build from source
 
 ```bash
-bash install.sh --from-local                               # build from ./cmd/lo
-bash install.sh --from-module github.com/notliad/liftoff/cmd/lo@latest
-bash install.sh --uninstall
+git clone https://github.com/notliad/liftoff.git
+cd liftoff
+go build ./cmd/lo
 ```
 
-```powershell
-.\install.ps1 -FromLocal
-.\install.ps1 -FromModule github.com/notliad/liftoff/cmd/lo@latest
-.\install.ps1 -Uninstall
+### Uninstall
+
+```bash
+rm -f ~/.local/bin/lo
+rm -rf ~/.config/lo
 ```
 
 ## Supported Languages & Frameworks
