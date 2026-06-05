@@ -3,6 +3,7 @@ package main
 // BubbleTea UI models, styles, and interactive components.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -579,7 +580,7 @@ func newSettingsMenuModel(cfg config) *settingsMenuModel {
 func (m *settingsMenuModel) Init() tea.Cmd { return nil }
 
 func (m *settingsMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	const maxItem = 1
+	const maxItem = 2
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -600,6 +601,8 @@ func (m *settingsMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected = "dirs"
 			case 1:
 				m.selected = "launchpads"
+			case 2:
+				m.selected = "terminal"
 			}
 			return m, tea.Quit
 		}
@@ -631,6 +634,11 @@ func (m *settingsMenuModel) View() string {
 			icon:   "🧩",
 			label:  "Launchpads",
 			detail: settingsLaunchpadsDetail(m.cfg),
+		},
+		{
+			icon:   "🖥",
+			label:  "Terminal",
+			detail: settingsTerminalDetail(m.cfg),
 		},
 	}
 
@@ -685,6 +693,17 @@ func settingsLaunchpadsDetail(cfg config) string {
 	}
 }
 
+func settingsTerminalDetail(cfg config) string {
+	if !cfg.UseTmux {
+		return "tmux off"
+	}
+	target := "tab"
+	if cfg.TmuxTarget == "pane" {
+		target = "vertical pane"
+	}
+	return fmt.Sprintf("tmux on (%s)", target)
+}
+
 // showSettingsMenu opens the settings menu TUI and returns the chosen action key.
 // Returns "" when the user exits without selecting.
 func showSettingsMenu(cfg config, inFile, outFile *os.File) (string, error) {
@@ -711,9 +730,9 @@ type launchpadListItem struct {
 
 // launchpadListModel lists existing launchpads and allows edit/delete/create.
 type launchpadListModel struct {
-	cfg       config
-	items     []launchpadListItem
-	cursor    int
+	cfg    config
+	items  []launchpadListItem
+	cursor int
 	// inline name-input for "new launchpad"
 	naming    bool
 	nameInput textinput.Model
@@ -881,4 +900,229 @@ func showLaunchpadSettings(cfg config, inFile, outFile *os.File) (action, name s
 		return "back", "", nil
 	}
 	return m.action, m.selected, nil
+}
+
+// --- Terminal settings ---
+
+// terminalSettingsModel configures tmux usage.
+type terminalSettingsModel struct {
+	cfg      config
+	cursor   int
+	phase    int // 0: main, 1: target picker
+	canceled bool
+	back     bool
+}
+
+func newTerminalSettingsModel(cfg config) *terminalSettingsModel {
+	return &terminalSettingsModel{cfg: cfg}
+}
+
+func (m *terminalSettingsModel) Init() tea.Cmd { return nil }
+
+func (m *terminalSettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch m.phase {
+		case 0:
+			return m.updateMain(msg)
+		case 1:
+			return m.updateTarget(msg)
+		}
+	}
+	return m, nil
+}
+
+func (m *terminalSettingsModel) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "esc", "q":
+		m.back = true
+		return m, tea.Quit
+	case "up", "k", "ctrl+p":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j", "ctrl+n":
+		maxItem := 0
+		if m.cfg.UseTmux {
+			maxItem = 1
+		}
+		if m.cursor < maxItem {
+			m.cursor++
+		}
+	case "enter":
+		switch m.cursor {
+		case 0:
+			m.cfg.UseTmux = !m.cfg.UseTmux
+			if !m.cfg.UseTmux {
+				m.cfg.TmuxTarget = ""
+			}
+		case 1:
+			m.phase = 1
+			m.cursor = 0
+		}
+	}
+	return m, nil
+}
+
+func (m *terminalSettingsModel) updateTarget(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "esc", "q":
+		m.back = true
+		return m, tea.Quit
+	case "up", "k", "ctrl+p":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j", "ctrl+n":
+		if m.cursor < 1 {
+			m.cursor++
+		}
+	case "enter":
+		switch m.cursor {
+		case 0:
+			m.cfg.TmuxTarget = "tab"
+		case 1:
+			m.cfg.TmuxTarget = "pane"
+		}
+		m.phase = 0
+		m.cursor = 0
+	}
+	return m, nil
+}
+
+func (m *terminalSettingsModel) View() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(" " + titleStyle.Render("🚀 Liftoff"))
+	b.WriteString("\n\n")
+
+	if m.phase == 1 {
+		return m.viewTarget(&b)
+	}
+
+	b.WriteString(" " + promptStyle.Render("🖥  Terminal Settings"))
+	b.WriteString("\n\n")
+
+	sepLen := 52
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n")
+
+	// Row 0: Use tmux toggle
+	tmuxVal := "No"
+	if m.cfg.UseTmux {
+		tmuxVal = successStyle.Render("Yes")
+	} else {
+		tmuxVal = mutedStyle.Render("No")
+	}
+	prefix0 := "  "
+	if m.cursor == 0 {
+		prefix0 = selectedStyle.Render("❯ ")
+	}
+	label0 := "  Use tmux when launching"
+	if m.cursor == 0 {
+		label0 = lipgloss.NewStyle().Bold(true).Render("Use tmux when launching")
+	}
+	b.WriteString("\n")
+	b.WriteString(" " + prefix0 + label0)
+	b.WriteString("   " + tmuxVal)
+	b.WriteString("\n")
+	b.WriteString("      " + mutedStyle.Render("open projects in tmux instead of a new terminal"))
+	b.WriteString("\n")
+
+	// Row 1: Tmux target (only when enabled)
+	if m.cfg.UseTmux {
+		targetLabel := "tab"
+		if m.cfg.TmuxTarget == "pane" {
+			targetLabel = "vertical pane"
+		}
+		prefix1 := "  "
+		if m.cursor == 1 {
+			prefix1 = selectedStyle.Render("❯ ")
+		}
+		label1 := "  Tmux target"
+		if m.cursor == 1 {
+			label1 = lipgloss.NewStyle().Bold(true).Render("Tmux target")
+		}
+		b.WriteString("\n")
+		b.WriteString(" " + prefix1 + label1)
+		b.WriteString("   " + previewStyle.Render(targetLabel))
+		b.WriteString("\n")
+		b.WriteString("      " + mutedStyle.Render("open in a new tab or vertical split pane"))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+
+	hint := "↑↓ navigate  ·  ⏎ toggle/edit  ·  esc back"
+	if !m.cfg.UseTmux {
+		hint = "↑↓ navigate  ·  ⏎ toggle  ·  esc back"
+	}
+	b.WriteString(" " + mutedStyle.Render(hint))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func (m *terminalSettingsModel) viewTarget(b *strings.Builder) string {
+	b.WriteString(" " + promptStyle.Render("🎯  Tmux Target"))
+	b.WriteString("\n\n")
+
+	sepLen := 52
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n")
+
+	targets := []struct {
+		label string
+		desc  string
+	}{
+		{label: "Tab", desc: "new tmux window (tab)"},
+		{label: "Vertical pane", desc: "vertical split in current window"},
+	}
+
+	for i, t := range targets {
+		prefix := "  "
+		if m.cursor == i {
+			prefix = selectedStyle.Render("❯ ")
+		}
+		label := t.label
+		if m.cursor == i {
+			label = lipgloss.NewStyle().Bold(true).Render(t.label)
+		}
+		b.WriteString("\n")
+		b.WriteString(" " + prefix + label)
+		b.WriteString("\n")
+		b.WriteString("      " + mutedStyle.Render(t.desc))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render(strings.Repeat("─", sepLen)))
+	b.WriteString("\n\n")
+	b.WriteString(" " + mutedStyle.Render("↑↓ navigate  ·  ⏎ select  ·  esc back"))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+// showTerminalSettings opens the terminal settings TUI and saves changes.
+func showTerminalSettings(cfgPath string, cfg *config, inFile, outFile *os.File) error {
+	model := newTerminalSettingsModel(*cfg)
+	p := tea.NewProgram(model, tea.WithInput(inFile), tea.WithOutput(outFile), tea.WithAltScreen())
+	result, err := p.Run()
+	if err != nil {
+		return err
+	}
+	m, ok := result.(*terminalSettingsModel)
+	if !ok || m == nil {
+		return errors.New("back")
+	}
+	cfg.UseTmux = m.cfg.UseTmux
+	cfg.TmuxTarget = m.cfg.TmuxTarget
+	if err := saveConfig(cfgPath, *cfg); err != nil {
+		return fmt.Errorf("❌ failed saving config: %w", err)
+	}
+	return errors.New("back")
 }

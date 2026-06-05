@@ -24,7 +24,7 @@ func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (ta
 
 // launchProject installs dependencies (if needed), then starts the project
 // in a detached terminal or the current shell.
-func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer) error {
+func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer, cfg *config) error {
 	target, installCmd, runCmd, runDir, err := resolveProjectRunner(project, in, out)
 	if err != nil {
 		return err
@@ -39,16 +39,16 @@ func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Wr
 
 	fmt.Fprintf(out, "🚀 Launching %s with %s\n", project.Name, target)
 	if watchMode {
-		return launchWithWatch(runDir, project.Name, runCmd, in, out, errOut)
+		return launchWithWatch(runDir, project.Name, runCmd, in, out, errOut, cfg)
 	}
-	if err := launchCrossPlatform(runDir, runCmd, out, errOut); err != nil {
+	if err := launchCrossPlatform(runDir, runCmd, out, errOut, cfg); err != nil {
 		return err
 	}
 	return nil
 }
 
 // launchProjectsParallel starts multiple projects concurrently and collects errors.
-func launchProjectsParallel(launchpadName string, projects []projectEntry, out io.Writer, errOut io.Writer) error {
+func launchProjectsParallel(launchpadName string, projects []projectEntry, out io.Writer, errOut io.Writer, cfg *config) error {
 	if len(projects) == 0 {
 		return errors.New("⚠️ launchpad has no projects")
 	}
@@ -70,7 +70,7 @@ func launchProjectsParallel(launchpadName string, projects []projectEntry, out i
 				mu.Unlock()
 				return
 			}
-			if err := launchProject(project, false, os.Stdin, out, errOut); err != nil {
+			if err := launchProject(project, false, os.Stdin, out, errOut, cfg); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("%s: %w", project.Display, err))
 				mu.Unlock()
@@ -85,9 +85,40 @@ func launchProjectsParallel(launchpadName string, projects []projectEntry, out i
 	return fmt.Errorf("❌ launchpad completed with %d errors (first: %v)", len(errs), errs[0])
 }
 
+// launchWithTmux runs a command in a new tmux window (tab) or vertical split pane.
+// Returns true if tmux was available and the launch was attempted.
+func launchWithTmux(projectPath string, runCmd []string, tmuxTarget string) bool {
+	if !hasCommand("tmux") {
+		return false
+	}
+	if os.Getenv("TMUX") == "" {
+		return false
+	}
+
+	shellLine := withErrorPause(
+		fmt.Sprintf("cd %s && %s", shellQuote(projectPath), shellJoin(runCmd)),
+	)
+
+	switch tmuxTarget {
+	case "pane":
+		exec.Command("tmux", "split-window", "-h", shellLine).Start()
+	default:
+		exec.Command("tmux", "new-window", shellLine).Start()
+	}
+	return true
+}
+
 // launchCrossPlatform opens a platform-appropriate terminal window to run the command.
 // Falls back to the current shell when no supported terminal is found.
-func launchCrossPlatform(projectPath string, runCmd []string, out io.Writer, errOut io.Writer) error {
+// If tmux is configured and available, it uses tmux instead.
+func launchCrossPlatform(projectPath string, runCmd []string, out io.Writer, errOut io.Writer, cfg *config) error {
+	if cfg != nil && cfg.UseTmux {
+		if launchWithTmux(projectPath, runCmd, cfg.TmuxTarget) {
+			fmt.Fprintln(out, "   ↳ launched in tmux")
+			return nil
+		}
+	}
+
 	shellLine := withErrorPause(
 		fmt.Sprintf("cd %s && %s", shellQuote(projectPath), shellJoin(runCmd)),
 	)

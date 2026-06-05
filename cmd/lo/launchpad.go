@@ -47,10 +47,10 @@ func runLaunchpadFlow(cfgPath string, cfg *config, entries []projectEntry, name 
 	}
 
 	if watchMode {
-		return launchProjectsWatchMode(name, resolvedProjects, in, out, errOut)
+		return launchProjectsWatchMode(name, resolvedProjects, in, out, errOut, cfg)
 	}
 
-	return launchProjectsParallel(name, resolvedProjects, out, errOut)
+	return launchProjectsParallel(name, resolvedProjects, out, errOut, cfg)
 }
 
 func listLaunchpadsFlow(cfg config, launchpadName string, out io.Writer) error {

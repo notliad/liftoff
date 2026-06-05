@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-const version = "0.5.1"
+const version = "0.5.2"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -101,7 +101,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		if len(remaining) == 2 {
 			query = strings.TrimSpace(remaining[1])
 		}
-		return runComposeFlow(cfg, query, in, out, errOut)
+		return runComposeFlow(&cfg, query, in, out, errOut)
 	}
 
 	if isPadMode && isListMode {
@@ -166,7 +166,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 
 	if query != "" {
 		if project, ok := findProject(projectEntries, query); ok {
-			return launchProject(project, isWatchMode, in, out, errOut)
+			return launchProject(project, isWatchMode, in, out, errOut, &cfg)
 		}
 
 		if _, exists := cfg.Launchpads[query]; exists {
@@ -181,7 +181,7 @@ func run(args []string, in io.Reader, out io.Writer, errOut io.Writer) error {
 		return err
 	}
 
-	return launchProject(project, isWatchMode, in, out, errOut)
+	return launchProject(project, isWatchMode, in, out, errOut, &cfg)
 }
 
 func writeUsage(w io.Writer) {
@@ -189,7 +189,7 @@ func writeUsage(w io.Writer) {
 
 	fmt.Fprintln(w, "Usage:")
 
-  	fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
+	fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
 	fmt.Fprintln(tw, "  lo compose [project-name]\tlaunch docker compose for a project")
 	fmt.Fprintln(tw, "  lo --list, -l\tlist projects")
 	fmt.Fprintln(tw, "")
@@ -209,7 +209,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 }
 
-func runComposeFlow(cfg config, query string, in io.Reader, out io.Writer, errOut io.Writer) error {
+func runComposeFlow(cfg *config, query string, in io.Reader, out io.Writer, errOut io.Writer) error {
 	projectEntries, err := listProjects(cfg.Dirs)
 	if err != nil {
 		return err
@@ -225,7 +225,7 @@ func runComposeFlow(cfg config, query string, in io.Reader, out io.Writer, errOu
 		return err
 	}
 
-	return launchProject(project, false, in, out, errOut)
+	return launchProject(project, false, in, out, errOut, cfg)
 }
 
 func filterProjectEntries(entries []projectEntry, variant string) []projectEntry {

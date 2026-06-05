@@ -22,6 +22,8 @@ import (
 type config struct {
 	Dirs       []string            `yaml:"dirs"`
 	Launchpads map[string][]string `yaml:"launchpads,omitempty"`
+	UseTmux    bool                `yaml:"use_tmux,omitempty"`
+	TmuxTarget string              `yaml:"tmux_target,omitempty"` // "tab" or "pane"
 }
 
 // legacyJSONConfig is used only for migrating old config.json files.
@@ -416,6 +418,8 @@ func runSettingsFlow(cfgPath, jsonMigratePath, legacyPath string, cfg *config, i
 				return err
 			}
 			updated.Launchpads = cfg.Launchpads
+			updated.UseTmux = cfg.UseTmux
+			updated.TmuxTarget = cfg.TmuxTarget
 			*cfg = updated
 			if err := saveConfig(cfgPath, *cfg); err != nil {
 				return fmt.Errorf("❌ failed saving config: %w", err)
@@ -423,6 +427,14 @@ func runSettingsFlow(cfgPath, jsonMigratePath, legacyPath string, cfg *config, i
 
 		case "launchpads":
 			if err := runLaunchpadSettingsFlow(cfgPath, cfg, inFile, outFile); err != nil && err.Error() != "back" {
+				return err
+			}
+
+		case "terminal":
+			if err := showTerminalSettings(cfgPath, cfg, inFile, outFile); err != nil {
+				if err.Error() == "back" {
+					continue
+				}
 				return err
 			}
 		}
