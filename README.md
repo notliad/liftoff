@@ -24,6 +24,7 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 * **Watch Mode**: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 * Docker Compose support
+* **tmux** support: You can opt in for using tmux when launching your projects
 
 ## Installation
 
