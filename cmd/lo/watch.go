@@ -178,12 +178,12 @@ func resetScrollRegion(height int) {
 
 // launchWithWatch opens a new terminal window for the project where the inline
 // resource-monitor footer is pinned at the bottom.
-func launchWithWatch(projectPath, projectName string, runCmd []string, _ io.Reader, out io.Writer, errOut io.Writer) error {
-	termName, err := startInlineWatchTerminal(projectName, projectPath, runCmd)
+func launchWithWatch(projectPath, projectName string, runCmd []string, _ io.Reader, out io.Writer, errOut io.Writer, cfg *config) error {
+	termType, err := startInlineWatchTerminal(projectName, projectPath, runCmd, cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "   ↳ opened in %s\n", termName)
+	fmt.Fprintf(out, "   ↳ opened in %s\n", termType)
 	return nil
 }
 
@@ -191,7 +191,7 @@ func launchWithWatch(projectPath, projectName string, runCmd []string, _ io.Read
 
 // launchProjectsWatchMode opens each project in its own terminal window, each
 // running "lo --_watch-inline" to display the inline resource-monitor footer.
-func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in io.Reader, out io.Writer, errOut io.Writer) error {
+func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in io.Reader, out io.Writer, errOut io.Writer, cfg *config) error {
 	if len(projects) == 0 {
 		return errors.New("launchpad has no projects")
 	}
@@ -215,12 +215,12 @@ func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in i
 		}
 
 		fmt.Fprintf(out, "Launching %s with %s\n", project.Name, target)
-		termName, err := startInlineWatchTerminal(project.Name, runDir, runCmd)
+		termType, err := startInlineWatchTerminal(project.Name, runDir, runCmd, cfg)
 		if err != nil {
 			fmt.Fprintf(errOut, "warning: %s: %v\n", project.Name, err)
 			continue
 		}
-		fmt.Fprintf(out, "  opened in %s\n", termName)
+		fmt.Fprintf(out, "  opened in %s\n", termType)
 		launched++
 	}
 
@@ -232,7 +232,7 @@ func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in i
 
 // startInlineWatchTerminal opens a new terminal window that runs
 // "lo --_watch-inline <name> <path> <cmd...>".
-func startInlineWatchTerminal(projectName, projectPath string, runCmd []string) (string, error) {
+func startInlineWatchTerminal(projectName, projectPath string, runCmd []string, cfg *config) (string, error) {
 	if runtime.GOOS != "linux" {
 		return "", errors.New("watch mode with external terminal is currently supported on Linux only")
 	}
@@ -245,6 +245,13 @@ func startInlineWatchTerminal(projectName, projectPath string, runCmd []string) 
 	// Build: lo --_watch-inline <name> <path> <cmd...>
 	allArgs := append([]string{loExe, "--_watch-inline", projectName, projectPath}, runCmd...)
 	shellLine := shellJoin(allArgs)
+
+	// Try tmux first if configured and available.
+	if cfg != nil && cfg.UseTmux {
+		if launchWithWatchTmux(shellLine, cfg.TmuxTarget) {
+			return "tmux", nil
+		}
+	}
 
 	terminals := []struct {
 		name string
@@ -268,6 +275,25 @@ func startInlineWatchTerminal(projectName, projectPath string, runCmd []string) 
 	}
 
 	return "", errors.New("could not open a terminal (tried: ghostty, kitty, alacritty, gnome-terminal)")
+}
+
+// launchWithWatchTmux opens a new tmux window/pane running the given shell command.
+// Returns true if tmux was available and the launch was attempted.
+func launchWithWatchTmux(shellLine string, tmuxTarget string) bool {
+	if !hasCommand("tmux") {
+		return false
+	}
+	if os.Getenv("TMUX") == "" {
+		return false
+	}
+
+	switch tmuxTarget {
+	case "pane":
+		exec.Command("tmux", "split-window", "-h", shellLine).Start()
+	default:
+		exec.Command("tmux", "new-window", shellLine).Start()
+	}
+	return true
 }
 
 // --- Process tree stats ---
