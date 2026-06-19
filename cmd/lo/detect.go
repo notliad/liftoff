@@ -186,7 +186,7 @@ func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Read
 		}
 
 		nodeModulesPath := filepath.Join(projectPath, "node_modules")
-		if _, statErr := os.Stat(nodeModulesPath); errors.Is(statErr, os.ErrNotExist) {
+		if _, statErr := os.Stat(nodeModulesPath); errors.Is(statErr, os.ErrNotExist) || needsReinstall(projectPath) {
 			return fmt.Sprintf("%s (%s)", pm, script), install, run, nil
 		}
 
