@@ -711,9 +711,9 @@ type launchpadListItem struct {
 
 // launchpadListModel lists existing launchpads and allows edit/delete/create.
 type launchpadListModel struct {
-	cfg       config
-	items     []launchpadListItem
-	cursor    int
+	cfg    config
+	items  []launchpadListItem
+	cursor int
 	// inline name-input for "new launchpad"
 	naming    bool
 	nameInput textinput.Model

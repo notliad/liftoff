@@ -35,6 +35,7 @@ func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Wr
 		if err := runCommandInDir(runDir, installCmd, out, errOut); err != nil {
 			return fmt.Errorf("dependency installation failed (%s): %w", strings.Join(installCmd, " "), err)
 		}
+		updateLockHash(runDir)
 	}
 
 	fmt.Fprintf(out, "🚀 Launching %s with %s\n", project.Name, target)

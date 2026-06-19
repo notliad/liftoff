@@ -189,7 +189,7 @@ func writeUsage(w io.Writer) {
 
 	fmt.Fprintln(w, "Usage:")
 
-  	fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
+	fmt.Fprintln(tw, "  lo [name]\tlaunch a project or launchpad")
 	fmt.Fprintln(tw, "  lo compose [project-name]\tlaunch docker compose for a project")
 	fmt.Fprintln(tw, "  lo --list, -l\tlist projects")
 	fmt.Fprintln(tw, "")
