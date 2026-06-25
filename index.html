@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Liftoff — a fast, cross-platform CLI to launch your dev environments from the terminal." />
+  <title>Liftoff — Launch your dev environments instantly</title>
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #0a0e14;
+      --surface: #111820;
+      --border: #1e2a36;
+      --text: #e1e7ed;
+      --muted: #8398a6;
+      --accent: #22c55e;
+      --accent-glow: rgba(34, 197, 94, .15);
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Source Code Pro', Consolas, monospace;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      width: 100%;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 0;
+    }
+
+    header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .logo span {
+      font-weight: 400;
+      color: var(--muted);
+    }
+
+    .header-link {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      color: var(--muted);
+      font-size: .875rem;
+      transition: color .15s;
+    }
+
+    .header-link:hover {
+      color: var(--text);
+    }
+
+    .header-link svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .star-count {
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+      color: var(--muted);
+      font-size: .8125rem;
+      transition: color .15s;
+    }
+
+    .star-count svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .star-count:hover {
+      color: var(--accent);
+    }
+
+    /* Hero */
+    .hero {
+      padding: clamp(3rem, 8vw, 6rem) 0 clamp(2.5rem, 6vw, 4rem);
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: clamp(1.75rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.12;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: clamp(.9375rem, 2vw, 1.125rem);
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+    }
+
+    /* Terminal window */
+    .terminal {
+      background: #060a0f;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      text-align: left;
+      max-width: 640px;
+      margin: 0 auto;
+      box-shadow: 0 12px 48px rgba(0,0,0,.6);
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 11px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+
+    .terminal-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot:nth-child(1) { background: #ff5f56; }
+    .terminal-dot:nth-child(2) { background: #ffbd2e; }
+    .terminal-dot:nth-child(3) { background: #27c93f; }
+
+    .terminal-bar span {
+      margin-left: auto;
+      font-size: .75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .terminal-body {
+      padding: clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 1.5rem);
+      font-family: var(--mono);
+      font-size: clamp(.8125rem, 1.5vw, .875rem);
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .terminal-body .prompt {
+      color: var(--accent);
+    }
+
+    .terminal-body .comment {
+      color: #556b7a;
+    }
+
+    .terminal-body .cmd {
+      color: var(--text);
+    }
+
+    .terminal-body .output {
+      color: var(--muted);
+    }
+
+    .terminal-body .sel {
+      color: var(--accent);
+    }
+
+    /* Section titles */
+    section {
+      padding: clamp(2.5rem, 6vw, 5rem) 0;
+    }
+
+    .section-header {
+      margin-bottom: clamp(2rem, 5vw, 3.5rem);
+    }
+
+    .section-header h2 {
+      font-size: clamp(1.25rem, 3vw, 1.75rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: .5rem;
+    }
+
+    .section-header p {
+      color: var(--muted);
+      max-width: 520px;
+    }
+
+    /* Features — man-page style */
+    .features-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .feature-row {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 1.5rem;
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .feature-row:first-child {
+      padding-top: 0;
+    }
+
+    .feature-row:last-child {
+      border-bottom: none;
+    }
+
+    .feature-flag {
+      font-family: var(--mono);
+      font-size: .9375rem;
+      color: var(--accent);
+      word-break: break-word;
+    }
+
+    .feature-desc h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: .2rem;
+    }
+
+    .feature-desc p {
+      font-size: .875rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* Installation */
+    .install-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .install-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .install-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .875rem 1.25rem .5rem;
+    }
+
+    .install-header h3 {
+      font-size: .8125rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .copy-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .15s;
+      position: relative;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    .copy-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .copy-btn .check {
+      display: none;
+    }
+
+    .copy-btn.copied .copy-icon {
+      display: none;
+    }
+
+    .copy-btn.copied .check {
+      display: block;
+      color: var(--accent);
+    }
+
+    .copy-btn.copied {
+      border-color: var(--accent);
+    }
+
+    .install-block pre {
+      background: #060a0f;
+      padding: .75rem 1.25rem 1rem;
+      font-family: var(--mono);
+      font-size: .8125rem;
+      line-height: 1.6;
+      overflow-x: auto;
+      color: var(--text);
+      border-bottom-left-radius: 8px;
+      border-bottom-right-radius: 8px;
+      white-space: pre-wrap;
+    }
+
+    .install-block pre .dim {
+      color: var(--muted);
+    }
+
+    .install-block.full {
+      grid-column: 1 / -1;
+    }
+
+    /* CTA */
+    .cta-section {
+      text-align: center;
+      padding: 2rem 0 4rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .75rem 2rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: background .15s, transform .1s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #060a0f;
+    }
+
+    .btn-primary:hover {
+      background: #1da34e;
+      transform: translateY(-1px);
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 0;
+      margin-top: auto;
+    }
+
+    footer .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .8125rem;
+      color: var(--muted);
+    }
+
+    footer a {
+      color: var(--muted);
+      transition: color .15s;
+    }
+
+    footer a:hover {
+      color: var(--accent);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .feature-row {
+        grid-template-columns: 1fr;
+        gap: .25rem;
+        padding: 1rem 0;
+      }
+
+      .install-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .install-block.full {
+        grid-column: 1;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero h1 {
+        letter-spacing: -0.01em;
+      }
+
+      .terminal-body {
+        font-size: .75rem;
+      }
+
+      .logo {
+        font-size: 1.125rem;
+      }
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--accent);
+      color: #060a0f;
+      font-size: .8125rem;
+      font-weight: 600;
+      padding: .5rem 1.25rem;
+      border-radius: 6px;
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      pointer-events: none;
+      font-family: var(--mono);
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <a href="/" class="logo">Liftoff <span>// lo</span></a>
+      <div class="header-right">
+        <a href="https://github.com/notliad/liftoff" class="header-link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>
+          <span>GitHub</span>
+        </a>
+        <a href="https://github.com/notliad/liftoff/stargazers" class="star-count" id="starCount" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+          <span id="starCountNum">—</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <h1>Launch your dev environments.<br>From the <span>terminal</span>.</h1>
+        <p>A fast, cross-platform CLI that removes friction from your development workflow. Select or type a project name and you're off — no folder hopping, no manual installs.</p>
+
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dot"></div>
+            <div class="terminal-dot"></div>
+            <div class="terminal-dot"></div>
+            <span>~/projects</span>
+          </div>
+          <div class="terminal-body">
+            <span class="prompt">$ </span><span class="cmd">lo</span><br>
+            <span class="comment"># pick from the interactive list</span><br>
+            <span class="output">  ○  my-app          </span><span class="sel">(Node / Next.js)</span><br>
+            <span class="output">  ○  api-service     </span><span class="sel">(Go / Chi)</span><br>
+            <span class="output">  ○  landing-page    </span><span class="sel">(Python / FastAPI)</span><br>
+            <span class="output">  ●  blog            </span><span class="sel">(Rust / Axum)</span><br><br>
+            <span class="prompt">$ </span><span class="cmd">lo blog</span><br>
+            <span class="comment"># launches directly by name</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-header">
+          <h2>Features</h2>
+          <p>Everything <span class="logo" style="font-size:inherit">Liftoff</span> does, mapped to the commands you'll use.</p>
+        </div>
+
+        <div class="features-list">
+          <div class="feature-row">
+            <div class="feature-flag">lo &lt;project&gt;</div>
+            <div class="feature-desc">
+              <h3>One-command launch</h3>
+              <p>Run any project from your workspace by name. No folder hopping, no fiddling — just <code>lo</code> and go.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <div class="feature-flag">auto-detect</div>
+            <div class="feature-desc">
+              <h3>Zero-config runtime detection</h3>
+              <p>Recognises Node, Rust, Python, Go, and Java projects automatically. Picks the right package manager, runtime, and framework every time.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <div class="feature-flag">auto-install</div>
+            <div class="feature-desc">
+              <h3>Automatic dependency installation</h3>
+              <p>Reads your lockfile, selects the correct package manager, and installs dependencies before launch — no separate step needed.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <div class="feature-flag">lo --pad &lt;name&gt;</div>
+            <div class="feature-desc">
+              <h3>Launchpads</h3>
+              <p>Group multiple projects into a named launchpad and start them all together. Perfect for microservices or full-stack apps.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <div class="feature-flag">lo --watch &lt;name&gt;</div>
+            <div class="feature-desc">
+              <h3>Watch mode</h3>
+              <p>Launch a project and monitor its resource usage in real time. CPU, memory, and process info — all inside the terminal.</p>
+            </div>
+          </div>
+          <div class="feature-row">
+            <div class="feature-flag">--cross-platform</div>
+            <div class="feature-desc">
+              <h3>Cross-platform support</h3>
+              <p>Works on Linux, macOS, and Windows. Includes Docker Compose detection and optional tmux integration.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-header">
+          <h2>Installation</h2>
+          <p>Get <span class="logo" style="font-size:inherit">Liftoff</span> running in seconds. Pick your method.</p>
+        </div>
+
+        <div class="install-grid">
+          <div class="install-block">
+            <div class="install-header">
+              <h3>Linux / macOS</h3>
+              <button class="copy-btn" data-cmd="curl -fsSL https://raw.githubusercontent.com/notliad/liftoff/main/install.sh | bash" aria-label="Copy command">
+                <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
+                <svg class="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 6 11 13 4"/></svg>
+              </button>
+            </div>
+            <pre>curl -fsSL https://raw.githubusercontent.com/<br>  notliad/liftoff/main/install.sh | bash</pre>
+          </div>
+          <div class="install-block">
+            <div class="install-header">
+              <h3>Windows (PowerShell)</h3>
+              <button class="copy-btn" data-cmd="irm https://raw.githubusercontent.com/notliad/liftoff/main/install.ps1 | iex" aria-label="Copy command">
+                <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
+                <svg class="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 6 11 13 4"/></svg>
+              </button>
+            </div>
+            <pre>irm https://raw.githubusercontent.com/<br>  notliad/liftoff/main/install.ps1 | iex</pre>
+          </div>
+          <div class="install-block">
+            <div class="install-header">
+              <h3>Go Install</h3>
+              <button class="copy-btn" data-cmd="go install github.com/notliad/liftoff/cmd/lo@latest" aria-label="Copy command">
+                <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
+                <svg class="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 6 11 13 4"/></svg>
+              </button>
+            </div>
+            <pre>go install github.com/notliad/liftoff/cmd/lo@latest</pre>
+          </div>
+          <div class="install-block">
+            <div class="install-header">
+              <h3>Arch Linux (AUR)</h3>
+              <button class="copy-btn" data-cmd="yay -S liftoff" aria-label="Copy command">
+                <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
+                <svg class="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 6 11 13 4"/></svg>
+              </button>
+            </div>
+            <pre>yay -S liftoff</pre>
+          </div>
+          <div class="install-block full">
+            <div class="install-header">
+              <h3>Build from source</h3>
+              <button class="copy-btn" data-cmd="git clone https://github.com/notliad/liftoff.git && cd liftoff && go build ./cmd/lo" aria-label="Copy command">
+                <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="10" height="10" rx="1.5"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
+                <svg class="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 6 11 13 4"/></svg>
+              </button>
+            </div>
+            <pre>git clone https://github.com/notliad/liftoff.git<br><span class="dim">cd liftoff</span><br>go build ./cmd/lo</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section">
+      <div class="container">
+        <a href="https://github.com/notliad/liftoff" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>
+          View on GitHub
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <span>&copy; 2026 Liftoff — MIT License</span>
+      <a href="https://github.com/notliad/liftoff" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast">Copied</div>
+
+  <script>
+    async function fetchStars() {
+      const el = document.getElementById('starCountNum');
+      try {
+        const res = await fetch('https://api.github.com/repos/notliad/liftoff');
+        if (!res.ok) return;
+        const data = await res.json();
+        const n = data.stargazers_count;
+        el.textContent = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : n;
+      } catch {}
+    }
+    fetchStars();
+
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const cmd = btn.getAttribute('data-cmd');
+        try {
+          await navigator.clipboard.writeText(cmd);
+          btn.classList.add('copied');
+          const toast = document.getElementById('toast');
+          toast.textContent = 'Copied to clipboard';
+          toast.classList.add('visible');
+          setTimeout(() => {
+            toast.classList.remove('visible');
+            btn.classList.remove('copied');
+          }, 1800);
+        } catch {
+          const toast = document.getElementById('toast');
+          toast.textContent = 'Failed to copy';
+          toast.classList.add('visible');
+          setTimeout(() => toast.classList.remove('visible'), 1800);
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>
