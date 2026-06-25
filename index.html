@@ -143,71 +143,15 @@
       margin: 0 auto 2.5rem;
     }
 
-    /* Terminal window */
-    .terminal {
-      background: #060a0f;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      text-align: left;
-      max-width: 640px;
+    /* Demo GIF */
+    .demo-gif {
+      display: block;
+      max-width: 100%;
+      width: 720px;
+      height: auto;
       margin: 0 auto;
+      border-radius: 10px;
       box-shadow: 0 12px 48px rgba(0,0,0,.6);
-    }
-
-    .terminal-bar {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      padding: 11px 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      user-select: none;
-    }
-
-    .terminal-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-
-    .terminal-dot:nth-child(1) { background: #ff5f56; }
-    .terminal-dot:nth-child(2) { background: #ffbd2e; }
-    .terminal-dot:nth-child(3) { background: #27c93f; }
-
-    .terminal-bar span {
-      margin-left: auto;
-      font-size: .75rem;
-      color: var(--muted);
-      font-family: var(--mono);
-    }
-
-    .terminal-body {
-      padding: clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 1.5rem);
-      font-family: var(--mono);
-      font-size: clamp(.8125rem, 1.5vw, .875rem);
-      line-height: 1.8;
-      overflow-x: auto;
-    }
-
-    .terminal-body .prompt {
-      color: var(--accent);
-    }
-
-    .terminal-body .comment {
-      color: #556b7a;
-    }
-
-    .terminal-body .cmd {
-      color: var(--text);
-    }
-
-    .terminal-body .output {
-      color: var(--muted);
-    }
-
-    .terminal-body .sel {
-      color: var(--accent);
     }
 
     /* Section titles */
@@ -216,7 +160,7 @@
     }
 
     .section-header {
-      margin-bottom: clamp(2rem, 5vw, 3.5rem);
+      margin-bottom: clamp(1.2rem, 3vw, 2.5rem);
     }
 
     .section-header h2 {
@@ -231,42 +175,46 @@
       max-width: 520px;
     }
 
-    /* Features — man-page style */
+    /* Features */
     .features-list {
       display: flex;
       flex-direction: column;
+      gap: 0;
     }
 
-    .feature-row {
+    .feature-item {
       display: grid;
-      grid-template-columns: 200px 1fr;
-      gap: 1.5rem;
-      padding: 1.25rem 0;
+      grid-template-columns: 12px 1fr;
+      gap: 1rem;
+      padding: 1.125rem 0;
       border-bottom: 1px solid var(--border);
     }
 
-    .feature-row:first-child {
+    .feature-item:first-child {
       padding-top: 0;
     }
 
-    .feature-row:last-child {
+    .feature-item:last-child {
       border-bottom: none;
+      padding-bottom: 0;
     }
 
-    .feature-flag {
-      font-family: var(--mono);
-      font-size: .9375rem;
-      color: var(--accent);
-      word-break: break-word;
+    .feature-marker {
+      width: 8px;
+      height: 8px;
+      border-radius: 1px;
+      background: var(--accent);
+      margin-top: .45rem;
+      flex-shrink: 0;
     }
 
-    .feature-desc h3 {
+    .feature-body h3 {
       font-size: 1rem;
       font-weight: 600;
       margin-bottom: .2rem;
     }
 
-    .feature-desc p {
+    .feature-body p {
       font-size: .875rem;
       color: var(--muted);
       line-height: 1.55;
@@ -425,9 +373,8 @@
 
     /* Responsive */
     @media (max-width: 768px) {
-      .feature-row {
-        grid-template-columns: 1fr;
-        gap: .25rem;
+      .feature-item {
+        gap: .75rem;
         padding: 1rem 0;
       }
 
@@ -499,27 +446,10 @@
   <main>
     <section class="hero">
       <div class="container">
-        <h1>Launch your dev environments.<br>From the <span>terminal</span>.</h1>
+        <h1>Launch your dev environments.<br>From <span>anywhere</span> on your terminal.</h1>
         <p>A fast, cross-platform CLI that removes friction from your development workflow. Select or type a project name and you're off — no folder hopping, no manual installs.</p>
 
-        <div class="terminal">
-          <div class="terminal-bar">
-            <div class="terminal-dot"></div>
-            <div class="terminal-dot"></div>
-            <div class="terminal-dot"></div>
-            <span>~/projects</span>
-          </div>
-          <div class="terminal-body">
-            <span class="prompt">$ </span><span class="cmd">lo</span><br>
-            <span class="comment"># pick from the interactive list</span><br>
-            <span class="output">  ○  my-app          </span><span class="sel">(Node / Next.js)</span><br>
-            <span class="output">  ○  api-service     </span><span class="sel">(Go / Chi)</span><br>
-            <span class="output">  ○  landing-page    </span><span class="sel">(Python / FastAPI)</span><br>
-            <span class="output">  ●  blog            </span><span class="sel">(Rust / Axum)</span><br><br>
-            <span class="prompt">$ </span><span class="cmd">lo blog</span><br>
-            <span class="comment"># launches directly by name</span>
-          </div>
-        </div>
+        <img src="https://vhs.charm.sh/vhs-2w8o77SZUIttPT16aQoUGX.gif" alt="Liftoff demo — launching a project from the terminal TUI" class="demo-gif">
       </div>
     </section>
 
@@ -527,48 +457,48 @@
       <div class="container">
         <div class="section-header">
           <h2>Features</h2>
-          <p>Everything <span class="logo" style="font-size:inherit">Liftoff</span> does, mapped to the commands you'll use.</p>
+          <p>Everything <span class="logo" style="font-size:inherit">Liftoff</span> does out of the box — no config files needed.</p>
         </div>
 
         <div class="features-list">
-          <div class="feature-row">
-            <div class="feature-flag">lo &lt;project&gt;</div>
-            <div class="feature-desc">
+          <div class="feature-item">
+            <div class="feature-marker"></div>
+            <div class="feature-body">
               <h3>One-command launch</h3>
               <p>Run any project from your workspace by name. No folder hopping, no fiddling — just <code>lo</code> and go.</p>
             </div>
           </div>
-          <div class="feature-row">
-            <div class="feature-flag">auto-detect</div>
-            <div class="feature-desc">
+          <div class="feature-item">
+            <div class="feature-marker"></div>
+            <div class="feature-body">
               <h3>Zero-config runtime detection</h3>
               <p>Recognises Node, Rust, Python, Go, and Java projects automatically. Picks the right package manager, runtime, and framework every time.</p>
             </div>
           </div>
-          <div class="feature-row">
-            <div class="feature-flag">auto-install</div>
-            <div class="feature-desc">
+          <div class="feature-item">
+            <div class="feature-marker"></div>
+            <div class="feature-body">
               <h3>Automatic dependency installation</h3>
               <p>Reads your lockfile, selects the correct package manager, and installs dependencies before launch — no separate step needed.</p>
             </div>
           </div>
-          <div class="feature-row">
-            <div class="feature-flag">lo --pad &lt;name&gt;</div>
-            <div class="feature-desc">
+          <div class="feature-item">
+            <div class="feature-marker"></div>
+            <div class="feature-body">
               <h3>Launchpads</h3>
               <p>Group multiple projects into a named launchpad and start them all together. Perfect for microservices or full-stack apps.</p>
             </div>
           </div>
-          <div class="feature-row">
-            <div class="feature-flag">lo --watch &lt;name&gt;</div>
-            <div class="feature-desc">
+          <div class="feature-item">
+            <div class="feature-marker"></div>
+            <div class="feature-body">
               <h3>Watch mode</h3>
               <p>Launch a project and monitor its resource usage in real time. CPU, memory, and process info — all inside the terminal.</p>
             </div>
           </div>
-          <div class="feature-row">
-            <div class="feature-flag">--cross-platform</div>
-            <div class="feature-desc">
+          <div class="feature-item">
+            <div class="feature-marker"></div>
+            <div class="feature-body">
               <h3>Cross-platform support</h3>
               <p>Works on Linux, macOS, and Windows. Includes Docker Compose detection and optional tmux integration.</p>
             </div>
