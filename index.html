@@ -176,48 +176,39 @@
     }
 
     /* Features */
-    .features-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-    }
-
-    .feature-item {
+    .feature-strip {
       display: grid;
-      grid-template-columns: 12px 1fr;
-      gap: 1rem;
-      padding: 1.125rem 0;
-      border-bottom: 1px solid var(--border);
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--surface);
     }
 
-    .feature-item:first-child {
-      padding-top: 0;
+    .feature-cell {
+      padding: 1rem;
+      border-right: 1px solid var(--border);
     }
 
-    .feature-item:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
+    .feature-cell:nth-child(3n) {
+      border-right: 0;
     }
 
-    .feature-marker {
-      width: 8px;
-      height: 8px;
-      border-radius: 1px;
-      background: var(--accent);
-      margin-top: .45rem;
-      flex-shrink: 0;
+    .feature-cell:nth-child(n+4) {
+      border-top: 1px solid var(--border);
     }
 
-    .feature-body h3 {
-      font-size: 1rem;
+    .feature-cell strong {
+      display: block;
+      font-size: .9375rem;
       font-weight: 600;
-      margin-bottom: .2rem;
+      margin-bottom: .25rem;
     }
 
-    .feature-body p {
+    .feature-cell span {
       font-size: .875rem;
       color: var(--muted);
-      line-height: 1.55;
+      line-height: 1.45;
     }
 
     /* Installation */
@@ -371,11 +362,80 @@
       color: var(--accent);
     }
 
+    /* Supported stack */
+    .stack-marquee {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    }
+
+    .stack-track {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      width: max-content;
+      padding: 1rem .75rem;
+      animation: stack-scroll 42s linear infinite;
+    }
+
+    .stack-marquee:hover .stack-track {
+      animation-play-state: paused;
+    }
+
+    .stack-item {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      min-width: max-content;
+      padding: .55rem .8rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #060a0f;
+      font-size: .8125rem;
+      color: var(--text);
+    }
+
+    .stack-item img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      padding: 3px;
+      border-radius: 5px;
+      background: #e1e7ed;
+    }
+
+    @keyframes stack-scroll {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .stack-track {
+        animation: none;
+        flex-wrap: wrap;
+        width: auto;
+      }
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
-      .feature-item {
-        gap: .75rem;
-        padding: 1rem 0;
+      .feature-strip {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .feature-cell,
+      .feature-cell:nth-child(3n) {
+        border-right: 1px solid var(--border);
+      }
+
+      .feature-cell:nth-child(2n) {
+        border-right: 0;
+      }
+
+      .feature-cell:nth-child(n+3) {
+        border-top: 1px solid var(--border);
       }
 
       .install-grid {
@@ -384,6 +444,10 @@
 
       .install-block.full {
         grid-column: 1;
+      }
+
+      .stack-track {
+        animation-duration: 34s;
       }
     }
 
@@ -398,6 +462,20 @@
 
       .logo {
         font-size: 1.125rem;
+      }
+
+      .feature-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-cell,
+      .feature-cell:nth-child(2n),
+      .feature-cell:nth-child(3n) {
+        border-right: 0;
+      }
+
+      .feature-cell:nth-child(n+2) {
+        border-top: 1px solid var(--border);
       }
     }
 
@@ -457,51 +535,87 @@
       <div class="container">
         <div class="section-header">
           <h2>Features</h2>
-          <p>Everything <span class="logo" style="font-size:inherit">Liftoff</span> does out of the box — no config files needed.</p>
+          <p>The essentials for opening projects without friction.</p>
         </div>
 
-        <div class="features-list">
-          <div class="feature-item">
-            <div class="feature-marker"></div>
-            <div class="feature-body">
-              <h3>One-command launch</h3>
-              <p>Run any project from your workspace by name. No folder hopping, no fiddling — just <code>lo</code> and go.</p>
-            </div>
+        <div class="feature-strip">
+          <div class="feature-cell">
+            <strong>Launch by name</strong>
+            <span><code>lo</code> finds and opens the project.</span>
           </div>
-          <div class="feature-item">
-            <div class="feature-marker"></div>
-            <div class="feature-body">
-              <h3>Zero-config runtime detection</h3>
-              <p>Recognises Node, Rust, Python, Go, and Java projects automatically. Picks the right package manager, runtime, and framework every time.</p>
-            </div>
+          <div class="feature-cell">
+            <strong>Detects the stack</strong>
+            <span>The right runtime, framework, and package manager.</span>
           </div>
-          <div class="feature-item">
-            <div class="feature-marker"></div>
-            <div class="feature-body">
-              <h3>Automatic dependency installation</h3>
-              <p>Reads your lockfile, selects the correct package manager, and installs dependencies before launch — no separate step needed.</p>
-            </div>
+          <div class="feature-cell">
+            <strong>Installs first</strong>
+            <span>Reads the lockfile and prepares dependencies.</span>
           </div>
-          <div class="feature-item">
-            <div class="feature-marker"></div>
-            <div class="feature-body">
-              <h3>Launchpads</h3>
-              <p>Group multiple projects into a named launchpad and start them all together. Perfect for microservices or full-stack apps.</p>
-            </div>
+          <div class="feature-cell">
+            <strong>Launchpads</strong>
+            <span>Start multiple projects together.</span>
           </div>
-          <div class="feature-item">
-            <div class="feature-marker"></div>
-            <div class="feature-body">
-              <h3>Watch mode</h3>
-              <p>Launch a project and monitor its resource usage in real time. CPU, memory, and process info — all inside the terminal.</p>
-            </div>
+          <div class="feature-cell">
+            <strong>Watch mode</strong>
+            <span>CPU, memory, and process status in the terminal.</span>
           </div>
-          <div class="feature-item">
-            <div class="feature-marker"></div>
-            <div class="feature-body">
-              <h3>Cross-platform support</h3>
-              <p>Works on Linux, macOS, and Windows. Includes Docker Compose detection and optional tmux integration.</p>
-            </div>
+          <div class="feature-cell">
+            <strong>Cross-platform</strong>
+            <span>Linux, macOS, Windows, Docker, and tmux.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-header">
+          <h2>Languages &amp; Frameworks</h2>
+          <p>Supported stacks, detected automatically.</p>
+        </div>
+
+        <div class="stack-marquee" aria-label="Supported languages and frameworks">
+          <div class="stack-track">
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" alt="" loading="lazy">Node.js</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-original.svg" alt="" loading="lazy">Rust</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original-wordmark.svg" alt="" loading="lazy">Go</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" alt="" loading="lazy">Python</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" alt="" loading="lazy">Java</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" loading="lazy">Next.js</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nuxtjs/nuxtjs-original.svg" alt="" loading="lazy">Nuxt</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/svelte/svelte-original.svg" alt="" loading="lazy">SvelteKit</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/astro/astro-original.svg" alt="" loading="lazy">Astro</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nestjs/nestjs-original.svg" alt="" loading="lazy">NestJS</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/remix/remix-original.svg" alt="" loading="lazy">Remix</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vitejs/vitejs-original.svg" alt="" loading="lazy">Vite</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" loading="lazy">React</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vuejs/vuejs-original.svg" alt="" loading="lazy">Vue</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/angularjs/angularjs-original.svg" alt="" loading="lazy">Angular</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/express/express-original.svg" alt="" loading="lazy">Express</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" alt="" loading="lazy">FastAPI</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg" alt="" loading="lazy">Flask</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/django/django-plain.svg" alt="" loading="lazy">Django</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original.svg" alt="" loading="lazy">Spring Boot</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" alt="" loading="lazy">Node.js</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-original.svg" alt="" loading="lazy">Rust</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original-wordmark.svg" alt="" loading="lazy">Go</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" alt="" loading="lazy">Python</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" alt="" loading="lazy">Java</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" loading="lazy">Next.js</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nuxtjs/nuxtjs-original.svg" alt="" loading="lazy">Nuxt</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/svelte/svelte-original.svg" alt="" loading="lazy">SvelteKit</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/astro/astro-original.svg" alt="" loading="lazy">Astro</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nestjs/nestjs-original.svg" alt="" loading="lazy">NestJS</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/remix/remix-original.svg" alt="" loading="lazy">Remix</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vitejs/vitejs-original.svg" alt="" loading="lazy">Vite</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" loading="lazy">React</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vuejs/vuejs-original.svg" alt="" loading="lazy">Vue</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/angularjs/angularjs-original.svg" alt="" loading="lazy">Angular</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/express/express-original.svg" alt="" loading="lazy">Express</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" alt="" loading="lazy">FastAPI</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg" alt="" loading="lazy">Flask</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/django/django-plain.svg" alt="" loading="lazy">Django</div>
+            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original.svg" alt="" loading="lazy">Spring Boot</div>
           </div>
         </div>
       </div>
