@@ -1,7 +1,7 @@
 package main
 
 // Runtime detection, framework hinting, and package manager resolution for
-// all supported languages: Node.js, Rust, Go, Python, and Java.
+// all supported languages: Node.js, Rust, Go, Python, Java, and Godot.
 
 import (
 	"bufio"
@@ -83,6 +83,10 @@ func isRunnableProjectDir(projectPath string) bool {
 		return err == nil
 	}
 
+	if fileExists(filepath.Join(projectPath, "project.godot")) {
+		return true
+	}
+
 	return false
 }
 
@@ -110,22 +114,27 @@ func previewProjectStack(projectPath string) string {
 
 	if fileExists(filepath.Join(projectPath, "Cargo.toml")) {
 		framework := detectRustFramework(projectPath)
-		return fmt.Sprintf("🦀 rust / %s", framework)
+		return fmt.Sprintf(" rust / %s", framework)
 	}
 
 	if isGoProject(projectPath) {
 		framework := detectGoFramework(projectPath)
-		return fmt.Sprintf("🐹 go / %s", framework)
+		return fmt.Sprintf(" go / %s", framework)
 	}
 
 	if isJavaProject(projectPath) {
 		framework := detectJavaFramework(projectPath)
-		return fmt.Sprintf("☕ java / %s", framework)
+		return fmt.Sprintf(" java / %s", framework)
 	}
 
 	if isPythonProject(projectPath) {
 		framework := detectPythonFramework(projectPath)
-		return fmt.Sprintf("🐍 python / %s", framework)
+		return fmt.Sprintf(" python / %s", framework)
+	}
+
+	if fileExists(filepath.Join(projectPath, "project.godot")) {
+		framework := detectGodotFramework(projectPath)
+		return fmt.Sprintf(" godot / %s", framework)
 	}
 
 	return ""
@@ -218,7 +227,11 @@ func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Read
 		return detectPythonRunner(projectPath)
 	}
 
-	return "", nil, nil, errors.New("❌ unsupported project type. Expected package.json, Cargo.toml, go.mod, pom.xml/build.gradle, pyproject.toml, .py entrypoint, or docker compose file")
+	if fileExists(filepath.Join(projectPath, "project.godot")) {
+		return detectGodotRunner(projectPath)
+	}
+
+	return "", nil, nil, errors.New("❌ unsupported project type. Expected package.json, Cargo.toml, go.mod, pom.xml/build.gradle, pyproject.toml, .py entrypoint, project.godot, or docker compose file")
 }
 
 // --- Node.js ---
@@ -960,4 +973,26 @@ func parsePythonDependencyName(raw string) string {
 		return ""
 	}
 	return strings.ToLower(raw)
+}
+
+// --- Godot ---
+
+func detectGodotFramework(projectPath string) string {
+	content := strings.ToLower(readFileOrEmpty(filepath.Join(projectPath, "project.godot")))
+	switch {
+	case strings.Contains(content, "config_version=5") || strings.Contains(content, `"4.`):
+		return "godot4"
+	case strings.Contains(content, "config_version=4") || strings.Contains(content, `"3.`):
+		return "godot3"
+	default:
+		return "godot"
+	}
+}
+
+func detectGodotRunner(projectPath string) (target string, installCmd []string, runCmd []string, err error) {
+	if !hasCommand("godot") {
+		return "", nil, nil, errors.New("❌ missing dependency: godot. Install the Godot Engine and run again")
+	}
+	framework := detectGodotFramework(projectPath)
+	return fmt.Sprintf("godot (%s)", framework), nil, []string{"godot", "--editor"}, nil
 }
