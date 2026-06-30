@@ -16,8 +16,8 @@ import (
 // resolveProjectRunner returns the target label, optional install command, run command,
 // and working directory for the given project. in/out are forwarded for interactive
 // package-manager selection when no lockfile is present.
-func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, runDir string, err error) {
-	target, installCmd, runCmd, err = detectProjectRunner(project.Path, project.Variant, project.ScriptOverride, in, out)
+func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, runDir string, gui bool, err error) {
+	target, installCmd, runCmd, gui, err = detectProjectRunner(project.Path, project.Variant, project.ScriptOverride, in, out)
 	runDir = project.Path
 	return
 }
@@ -25,7 +25,7 @@ func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (ta
 // launchProject installs dependencies (if needed), then starts the project
 // in a detached terminal or the current shell.
 func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer, cfg *config) error {
-	target, installCmd, runCmd, runDir, err := resolveProjectRunner(project, in, out)
+	target, installCmd, runCmd, runDir, gui, err := resolveProjectRunner(project, in, out)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Wr
 	if watchMode {
 		return launchWithWatch(runDir, project.Name, runCmd, in, out, errOut, cfg)
 	}
-	if err := launchCrossPlatform(runDir, runCmd, out, errOut, cfg); err != nil {
+	if err := launchCrossPlatform(runDir, runCmd, gui, out, errOut, cfg); err != nil {
 		return err
 	}
 	return nil
@@ -112,7 +112,16 @@ func launchWithTmux(projectPath string, runCmd []string, tmuxTarget string) bool
 // launchCrossPlatform opens a platform-appropriate terminal window to run the command.
 // Falls back to the current shell when no supported terminal is found.
 // If tmux is configured and available, it uses tmux instead.
-func launchCrossPlatform(projectPath string, runCmd []string, out io.Writer, errOut io.Writer, cfg *config) error {
+func launchCrossPlatform(projectPath string, runCmd []string, gui bool, out io.Writer, errOut io.Writer, cfg *config) error {
+	if gui {
+		cmd := exec.Command(runCmd[0], runCmd[1:]...)
+		cmd.Dir = projectPath
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("❌ failed to launch GUI application: %w", err)
+		}
+		fmt.Fprintln(out, "   ↳ launched directly")
+		return nil
+	}
 	if cfg != nil && cfg.UseTmux {
 		if launchWithTmux(projectPath, runCmd, cfg.TmuxTarget) {
 			fmt.Fprintln(out, "   ↳ launched in tmux")

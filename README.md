@@ -18,13 +18,16 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 ## Features
 
 * Launch any project from your workspace with a single command
-* Zero-config runtime detection (Node, Rust, Python, Go, Java)
+* Zero-config runtime detection (Node, Rust, Python, Go, Java, Godot)
 * Automatic dependency installation
 * **Launchpads**: group multiple projects and start them together
 * **Watch Mode**: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 * Docker Compose support
 * **tmux** support: You can opt in for using tmux when launching your projects
+
+> **Note:** `lo` uses [Nerd Font](https://www.nerdfonts.com/) icons for runtime labels.
+> Install a Nerd Font (e.g. [JetBrains Mono](https://www.nerdfonts.com/font-downloads)) and set it in your terminal for the best visual experience.
 
 ## Installation
 
@@ -112,6 +115,13 @@ rm -rf ~/.config/lo
 * Runs with `go run .` or `go run ./cmd/<name>`
 * Framework hints:
   Gin, Fiber, Echo, Chi, Temporal
+
+### Godot
+
+* Detects `project.godot`
+* Opens the Godot editor
+* Framework hints:
+  Godot 3, Godot 4
 
 ### Docs & Static Sites
 
