@@ -1,4 +1,4 @@
-<img width="1683" height="934" alt="liftoff" src="https://github.com/user-attachments/assets/bfb78c2d-7d02-4741-9833-9d2aed931292" />
+<img width="1672" height="941" alt="liftoff" src="https://github.com/user-attachments/assets/c221bb88-e258-4d0b-864f-a51b4d129fab" />
 <div align="center">
   
 [![GitHub Stars](https://img.shields.io/github/stars/notliad/liftoff?style=flat&color=FFD700&logo=github&logoColor=white)](https://github.com/notliad/liftoff/stargazers)
