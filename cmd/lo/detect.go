@@ -158,27 +158,27 @@ func previewNodeStack(projectPath string) string {
 // it is used as the npm script instead of auto-detecting dev/start.
 // in/out are passed through for interactive package-manager selection when no
 // lockfile is found; either may be nil for non-interactive callers.
-func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, err error) {
+func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, gui bool, err error) {
 	if variant == projectVariantCompose {
 		composeFile, ok := detectComposeFile(projectPath)
 		if !ok {
-			return "", nil, nil, errors.New("❌ no docker compose file found in project root")
+			return "", nil, nil, false, errors.New("❌ no docker compose file found in project root")
 		}
 		if !hasCommand("docker") {
-			return "", nil, nil, errors.New("❌ missing dependency: docker. Install Docker and run again")
+			return "", nil, nil, false, errors.New("❌ missing dependency: docker. Install Docker and run again")
 		}
 		composeCheck := exec.Command("docker", "compose", "version")
 		if err := composeCheck.Run(); err != nil {
-			return "", nil, nil, errors.New("❌ missing dependency: docker compose. Install the Docker Compose plugin and run again")
+			return "", nil, nil, false, errors.New("❌ missing dependency: docker compose. Install the Docker Compose plugin and run again")
 		}
-		return "docker compose", nil, []string{"docker", "compose", "-f", composeFile, "up", "-d", "--build", "--remove-orphans"}, nil
+		return "docker compose", nil, []string{"docker", "compose", "-f", composeFile, "up", "-d", "--build", "--remove-orphans"}, false, nil
 	}
 
 	packageJSONPath := filepath.Join(projectPath, "package.json")
 	if _, statErr := os.Stat(packageJSONPath); statErr == nil {
 		pkg, readErr := loadPackageJSON(packageJSONPath)
 		if readErr != nil {
-			return "", nil, nil, readErr
+			return "", nil, nil, false, readErr
 		}
 
 		script := scriptOverride
@@ -186,33 +186,33 @@ func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Read
 			script = detectScript(pkg)
 		}
 		if script == "" {
-			return "", nil, nil, errors.New("❌ no dev/start script found in package.json")
+			return "", nil, nil, false, errors.New("❌ no dev/start script found in package.json")
 		}
 
 		pm, install, run, pmErr := detectPackageManager(projectPath, script, in, out)
 		if pmErr != nil {
-			return "", nil, nil, pmErr
+			return "", nil, nil, false, pmErr
 		}
 
 		nodeModulesPath := filepath.Join(projectPath, "node_modules")
 		if _, statErr := os.Stat(nodeModulesPath); errors.Is(statErr, os.ErrNotExist) || needsReinstall(projectPath) {
-			return fmt.Sprintf("%s (%s)", pm, script), install, run, nil
+			return fmt.Sprintf("%s (%s)", pm, script), install, run, false, nil
 		}
 
-		return fmt.Sprintf("%s (%s)", pm, script), nil, run, nil
+		return fmt.Sprintf("%s (%s)", pm, script), nil, run, false, nil
 	}
 
 	cargoPath := filepath.Join(projectPath, "Cargo.toml")
 	if _, statErr := os.Stat(cargoPath); statErr == nil {
 		if !hasCommand("cargo") {
-			return "", nil, nil, errors.New("❌ missing dependency: cargo. Install Rust toolchain and run again")
+			return "", nil, nil, false, errors.New("❌ missing dependency: cargo. Install Rust toolchain and run again")
 		}
 		var install []string
 		// Fetch crates on first clone (no Cargo.lock yet).
 		if !fileExists(filepath.Join(projectPath, "Cargo.lock")) {
 			install = []string{"cargo", "fetch"}
 		}
-		return "cargo (run)", install, []string{"cargo", "run"}, nil
+		return "cargo (run)", install, []string{"cargo", "run"}, false, nil
 	}
 
 	if isGoProject(projectPath) {
@@ -231,7 +231,7 @@ func detectProjectRunner(projectPath, variant, scriptOverride string, in io.Read
 		return detectGodotRunner(projectPath)
 	}
 
-	return "", nil, nil, errors.New("❌ unsupported project type. Expected package.json, Cargo.toml, go.mod, pom.xml/build.gradle, pyproject.toml, .py entrypoint, project.godot, or docker compose file")
+	return "", nil, nil, false, errors.New("❌ unsupported project type. Expected package.json, Cargo.toml, go.mod, pom.xml/build.gradle, pyproject.toml, .py entrypoint, project.godot, or docker compose file")
 }
 
 // --- Node.js ---
@@ -542,9 +542,9 @@ func hasMainPackageInDir(dir string) bool {
 	return false
 }
 
-func detectGoRunner(projectPath string) (target string, installCmd []string, runCmd []string, err error) {
+func detectGoRunner(projectPath string) (target string, installCmd []string, runCmd []string, gui bool, err error) {
 	if !hasCommand("go") {
-		return "", nil, nil, errors.New("❌ missing dependency: go. Install Go and run again")
+		return "", nil, nil, false, errors.New("❌ missing dependency: go. Install Go and run again")
 	}
 
 	// Download module dependencies when they are not vendored yet.
@@ -558,10 +558,10 @@ func detectGoRunner(projectPath string) (target string, installCmd []string, run
 
 	if strings.HasPrefix(entry, "go run ./cmd/") {
 		cmdPath := strings.TrimPrefix(entry, "go run ")
-		return fmt.Sprintf("go (%s)", framework), install, []string{"go", "run", cmdPath}, nil
+		return fmt.Sprintf("go (%s)", framework), install, []string{"go", "run", cmdPath}, false, nil
 	}
 
-	return fmt.Sprintf("go (%s)", framework), install, []string{"go", "run", "."}, nil
+	return fmt.Sprintf("go (%s)", framework), install, []string{"go", "run", "."}, false, nil
 }
 
 // --- Java ---
@@ -615,40 +615,40 @@ func detectJavaRunnerHint(projectPath string) string {
 	return "java"
 }
 
-func detectJavaRunner(projectPath string) (target string, installCmd []string, runCmd []string, err error) {
+func detectJavaRunner(projectPath string) (target string, installCmd []string, runCmd []string, gui bool, err error) {
 	framework := detectJavaFramework(projectPath)
 
 	if fileExists(filepath.Join(projectPath, "pom.xml")) {
 		mvnCmd, err := detectMavenCommand(projectPath)
 		if err != nil {
-			return "", nil, nil, err
+			return "", nil, nil, false, err
 		}
 
 		if framework == "spring" {
-			return "java (spring/maven)", nil, []string{mvnCmd, "spring-boot:run"}, nil
+			return "java (spring/maven)", nil, []string{mvnCmd, "spring-boot:run"}, false, nil
 		}
 
-		return "java (maven)", nil, []string{mvnCmd, "exec:java"}, nil
+		return "java (maven)", nil, []string{mvnCmd, "exec:java"}, false, nil
 	}
 
 	if fileExists(filepath.Join(projectPath, "build.gradle")) || fileExists(filepath.Join(projectPath, "build.gradle.kts")) {
 		gradleCmd, err := detectGradleCommand(projectPath)
 		if err != nil {
-			return "", nil, nil, err
+			return "", nil, nil, false, err
 		}
 
 		if framework == "spring" {
-			return "java (spring/gradle)", nil, []string{gradleCmd, "bootRun"}, nil
+			return "java (spring/gradle)", nil, []string{gradleCmd, "bootRun"}, false, nil
 		}
 
 		if hasGradleApplicationPlugin(projectPath) {
-			return "java (gradle)", nil, []string{gradleCmd, "run"}, nil
+			return "java (gradle)", nil, []string{gradleCmd, "run"}, false, nil
 		}
 
-		return "java (gradle)", nil, []string{gradleCmd, "build"}, nil
+		return "java (gradle)", nil, []string{gradleCmd, "build"}, false, nil
 	}
 
-	return "", nil, nil, errors.New("❌ java project detected but no pom.xml/build.gradle found")
+	return "", nil, nil, false, errors.New("❌ java project detected but no pom.xml/build.gradle found")
 }
 
 func detectMavenCommand(projectPath string) (string, error) {
@@ -760,15 +760,15 @@ func detectPythonRunnerHint(projectPath string) string {
 	return "python"
 }
 
-func detectPythonRunner(projectPath string) (target string, installCmd []string, runCmd []string, err error) {
+func detectPythonRunner(projectPath string) (target string, installCmd []string, runCmd []string, gui bool, err error) {
 	pythonCmd, err := detectPythonCommand()
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, false, err
 	}
 
 	entry, err := detectPythonEntrypoint(projectPath)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, false, err
 	}
 
 	framework := detectPythonFramework(projectPath)
@@ -776,34 +776,34 @@ func detectPythonRunner(projectPath string) (target string, installCmd []string,
 	// MkDocs runs as a standalone command, not via the python interpreter.
 	if framework == "mkdocs" {
 		if !hasCommand("mkdocs") {
-			return "", nil, nil, errors.New("❌ missing dependency: mkdocs. Install with 'pip install mkdocs' and run again")
+			return "", nil, nil, false, errors.New("❌ missing dependency: mkdocs. Install with 'pip install mkdocs' and run again")
 		}
-		return "mkdocs (serve)", nil, entry, nil
+		return "mkdocs (serve)", nil, entry, false, nil
 	}
 
 	if fileExists(filepath.Join(projectPath, "uv.lock")) && hasCommand("uv") {
 		run := append([]string{"uv", "run", "python"}, entry...)
-		return fmt.Sprintf("python (%s, uv)", framework), []string{"uv", "sync"}, run, nil
+		return fmt.Sprintf("python (%s, uv)", framework), []string{"uv", "sync"}, run, false, nil
 	}
 
 	if fileExists(filepath.Join(projectPath, "poetry.lock")) && hasCommand("poetry") {
 		run := append([]string{"poetry", "run", "python"}, entry...)
-		return fmt.Sprintf("python (%s, poetry)", framework), []string{"poetry", "install"}, run, nil
+		return fmt.Sprintf("python (%s, poetry)", framework), []string{"poetry", "install"}, run, false, nil
 	}
 
 	run := append([]string{pythonCmd}, entry...)
 	if fileExists(filepath.Join(projectPath, "requirements.txt")) {
 		install := []string{pythonCmd, "-m", "pip", "install", "-r", "requirements.txt"}
-		return fmt.Sprintf("python (%s)", framework), install, run, nil
+		return fmt.Sprintf("python (%s)", framework), install, run, false, nil
 	}
 
 	// setup.py / pyproject.toml without a dedicated lockfile: editable install.
 	if fileExists(filepath.Join(projectPath, "setup.py")) || fileExists(filepath.Join(projectPath, "pyproject.toml")) {
 		install := []string{pythonCmd, "-m", "pip", "install", "-e", "."}
-		return fmt.Sprintf("python (%s)", framework), install, run, nil
+		return fmt.Sprintf("python (%s)", framework), install, run, false, nil
 	}
 
-	return fmt.Sprintf("python (%s)", framework), nil, run, nil
+	return fmt.Sprintf("python (%s)", framework), nil, run, false, nil
 }
 
 func detectPythonEntrypoint(projectPath string) ([]string, error) {
@@ -989,10 +989,10 @@ func detectGodotFramework(projectPath string) string {
 	}
 }
 
-func detectGodotRunner(projectPath string) (target string, installCmd []string, runCmd []string, err error) {
+func detectGodotRunner(projectPath string) (target string, installCmd []string, runCmd []string, gui bool, err error) {
 	if !hasCommand("godot") {
-		return "", nil, nil, errors.New("❌ missing dependency: godot. Install the Godot Engine and run again")
+		return "", nil, nil, false, errors.New("❌ missing dependency: godot. Install the Godot Engine and run again")
 	}
 	framework := detectGodotFramework(projectPath)
-	return fmt.Sprintf("godot (%s)", framework), nil, []string{"godot", "--editor"}, nil
+	return fmt.Sprintf("godot (%s)", framework), nil, []string{"godot", "--editor"}, true, nil
 }
