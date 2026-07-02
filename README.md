@@ -7,6 +7,8 @@
 ![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Fnotliad%2Fliftoff&label=visitors&countColor=%230c7ebe&style=flat&labelStyle=none)
 ![release](https://img.shields.io/github/v/release/notliad/liftoff) ![Go](https://img.shields.io/badge/GO-00ADD8?style=flat&logo=go&logoColor=black)
 
+<a href='https://ko-fi.com/R6R11CIHFE' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
 </div>
 
 **lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI designed to remove friction from your development workflow.
