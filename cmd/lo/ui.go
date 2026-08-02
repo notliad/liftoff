@@ -694,8 +694,15 @@ func settingsLaunchpadsDetail(cfg config) string {
 }
 
 func settingsTerminalDetail(cfg config) string {
+	if cfg.UseHerdr {
+		target := "tab"
+		if cfg.HerdrTarget == "pane" {
+			target = "vertical pane"
+		}
+		return fmt.Sprintf("herdr on (%s)", target)
+	}
 	if !cfg.UseTmux {
-		return "tmux off"
+		return "tmux/herdr off"
 	}
 	target := "tab"
 	if cfg.TmuxTarget == "pane" {
@@ -942,9 +949,9 @@ func (m *terminalSettingsModel) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			m.cursor--
 		}
 	case "down", "j", "ctrl+n":
-		maxItem := 0
-		if m.cfg.UseTmux {
-			maxItem = 1
+		maxItem := 1
+		if m.cfg.UseTmux || m.cfg.UseHerdr {
+			maxItem = 2
 		}
 		if m.cursor < maxItem {
 			m.cursor++
@@ -957,6 +964,11 @@ func (m *terminalSettingsModel) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 				m.cfg.TmuxTarget = ""
 			}
 		case 1:
+			m.cfg.UseHerdr = !m.cfg.UseHerdr
+			if !m.cfg.UseHerdr {
+				m.cfg.HerdrTarget = ""
+			}
+		case 2:
 			m.phase = 1
 			m.cursor = 0
 		}
@@ -980,9 +992,17 @@ func (m *terminalSettingsModel) updateTarget(msg tea.KeyMsg) (tea.Model, tea.Cmd
 	case "enter":
 		switch m.cursor {
 		case 0:
-			m.cfg.TmuxTarget = "tab"
+			if m.cfg.UseHerdr {
+				m.cfg.HerdrTarget = "tab"
+			} else {
+				m.cfg.TmuxTarget = "tab"
+			}
 		case 1:
-			m.cfg.TmuxTarget = "pane"
+			if m.cfg.UseHerdr {
+				m.cfg.HerdrTarget = "pane"
+			} else {
+				m.cfg.TmuxTarget = "pane"
+			}
 		}
 		m.phase = 0
 		m.cursor = 0
@@ -1030,19 +1050,44 @@ func (m *terminalSettingsModel) View() string {
 	b.WriteString("      " + mutedStyle.Render("open projects in tmux instead of a new terminal"))
 	b.WriteString("\n")
 
-	// Row 1: Tmux target (only when enabled)
-	if m.cfg.UseTmux {
+	// Row 1: Use herdr toggle.
+	herdrVal := mutedStyle.Render("No")
+	if m.cfg.UseHerdr {
+		herdrVal = successStyle.Render("Yes")
+	}
+	prefixHerdr := "  "
+	if m.cursor == 1 {
+		prefixHerdr = selectedStyle.Render("❯ ")
+	}
+	labelHerdr := "  Use herdr when launching"
+	if m.cursor == 1 {
+		labelHerdr = lipgloss.NewStyle().Bold(true).Render("Use herdr when launching")
+	}
+	b.WriteString("\n")
+	b.WriteString(" " + prefixHerdr + labelHerdr)
+	b.WriteString("   " + herdrVal)
+	b.WriteString("\n")
+	b.WriteString("      " + mutedStyle.Render("open projects in herdr instead of a new terminal"))
+	b.WriteString("\n")
+
+	// Row 2: terminal target (only when either multiplexer is enabled).
+	if m.cfg.UseTmux || m.cfg.UseHerdr {
+		targetCursor := 2
 		targetLabel := "tab"
-		if m.cfg.TmuxTarget == "pane" {
+		target := m.cfg.TmuxTarget
+		if m.cfg.UseHerdr {
+			target = m.cfg.HerdrTarget
+		}
+		if target == "pane" {
 			targetLabel = "vertical pane"
 		}
 		prefix1 := "  "
-		if m.cursor == 1 {
+		if m.cursor == targetCursor {
 			prefix1 = selectedStyle.Render("❯ ")
 		}
-		label1 := "  Tmux target"
-		if m.cursor == 1 {
-			label1 = lipgloss.NewStyle().Bold(true).Render("Tmux target")
+		label1 := "  Terminal target"
+		if m.cursor == targetCursor {
+			label1 = lipgloss.NewStyle().Bold(true).Render("Terminal target")
 		}
 		b.WriteString("\n")
 		b.WriteString(" " + prefix1 + label1)
@@ -1057,7 +1102,7 @@ func (m *terminalSettingsModel) View() string {
 	b.WriteString("\n\n")
 
 	hint := "↑↓ navigate  ·  ⏎ toggle/edit  ·  esc back"
-	if !m.cfg.UseTmux {
+	if !m.cfg.UseTmux && !m.cfg.UseHerdr {
 		hint = "↑↓ navigate  ·  ⏎ toggle  ·  esc back"
 	}
 	b.WriteString(" " + mutedStyle.Render(hint))
@@ -1067,7 +1112,11 @@ func (m *terminalSettingsModel) View() string {
 }
 
 func (m *terminalSettingsModel) viewTarget(b *strings.Builder) string {
-	b.WriteString(" " + promptStyle.Render("🎯  Tmux Target"))
+	targetName := "Tmux"
+	if m.cfg.UseHerdr {
+		targetName = "Herdr"
+	}
+	b.WriteString(" " + promptStyle.Render("🎯  "+targetName+" Target"))
 	b.WriteString("\n\n")
 
 	sepLen := 52
@@ -1078,8 +1127,8 @@ func (m *terminalSettingsModel) viewTarget(b *strings.Builder) string {
 		label string
 		desc  string
 	}{
-		{label: "Tab", desc: "new tmux window (tab)"},
-		{label: "Vertical pane", desc: "vertical split in current window"},
+		{label: "Tab", desc: "new tab"},
+		{label: "Vertical pane", desc: "split to the right in current tab"},
 	}
 
 	for i, t := range targets {
@@ -1121,6 +1170,8 @@ func showTerminalSettings(cfgPath string, cfg *config, inFile, outFile *os.File)
 	}
 	cfg.UseTmux = m.cfg.UseTmux
 	cfg.TmuxTarget = m.cfg.TmuxTarget
+	cfg.UseHerdr = m.cfg.UseHerdr
+	cfg.HerdrTarget = m.cfg.HerdrTarget
 	if err := saveConfig(cfgPath, *cfg); err != nil {
 		return fmt.Errorf("❌ failed saving config: %w", err)
 	}

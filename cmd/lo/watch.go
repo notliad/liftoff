@@ -246,7 +246,14 @@ func startInlineWatchTerminal(projectName, projectPath string, runCmd []string, 
 	allArgs := append([]string{loExe, "--_watch-inline", projectName, projectPath}, runCmd...)
 	shellLine := shellJoin(allArgs)
 
-	// Try tmux first if configured and available.
+	// Try herdr first if configured and available.
+	if cfg != nil && cfg.UseHerdr {
+		if launchWithWatchHerdr(projectPath, projectName, allArgs, cfg.HerdrTarget) {
+			return "herdr", nil
+		}
+	}
+
+	// Try tmux if configured and available.
 	if cfg != nil && cfg.UseTmux {
 		if launchWithWatchTmux(shellLine, cfg.TmuxTarget) {
 			return "tmux", nil
@@ -275,6 +282,21 @@ func startInlineWatchTerminal(projectName, projectPath string, runCmd []string, 
 	}
 
 	return "", errors.New("could not open a terminal (tried: ghostty, kitty, alacritty, gnome-terminal)")
+}
+
+// launchWithWatchHerdr opens a new herdr tab or split pane running the watcher.
+func launchWithWatchHerdr(projectPath, projectName string, command []string, herdrTarget string) bool {
+	if len(command) == 0 || !hasCommand("herdr") || os.Getenv("HERDR_ENV") == "" {
+		return false
+	}
+
+	args := []string{"agent", "start", projectName, "--cwd", projectPath}
+	if herdrTarget == "pane" {
+		args = append(args, "--split", "right")
+	}
+	args = append(args, "--")
+	args = append(args, command...)
+	return exec.Command("herdr", args...).Start() == nil
 }
 
 // launchWithWatchTmux opens a new tmux window/pane running the given shell command.
