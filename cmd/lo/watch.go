@@ -290,10 +290,11 @@ func launchWithWatchHerdr(projectPath, projectName string, command []string, her
 		return false
 	}
 
-	args := []string{"agent", "start", projectName, "--cwd", projectPath}
-	if herdrTarget == "pane" {
-		args = append(args, "--split", "right")
+	if herdrTarget != "pane" {
+		return launchHerdrTab(projectPath, projectName, command)
 	}
+
+	args := []string{"agent", "start", projectName, "--cwd", projectPath, "--split", "right"}
 	args = append(args, "--")
 	args = append(args, command...)
 	return exec.Command("herdr", args...).Start() == nil
