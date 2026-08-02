@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -109,10 +110,37 @@ func launchWithTmux(projectPath string, runCmd []string, tmuxTarget string) bool
 	return true
 }
 
+// launchWithHerdr runs a command in a new herdr tab or split pane.
+// Returns true if herdr was available and the launch was attempted.
+func launchWithHerdr(projectPath string, runCmd []string, herdrTarget string) bool {
+	if len(runCmd) == 0 || !hasCommand("herdr") {
+		return false
+	}
+	if os.Getenv("HERDR_ENV") == "" {
+		return false
+	}
+
+	agentName := filepath.Base(projectPath)
+	args := []string{"agent", "start", agentName, "--cwd", projectPath}
+	if herdrTarget == "pane" {
+		args = append(args, "--split", "right")
+	}
+	args = append(args, "--")
+	args = append(args, runCmd...)
+
+	return exec.Command("herdr", args...).Start() == nil
+}
+
 // launchCrossPlatform opens a platform-appropriate terminal window to run the command.
 // Falls back to the current shell when no supported terminal is found.
-// If tmux is configured and available, it uses tmux instead.
+// If tmux/herdr is configured and available, it uses that instead.
 func launchCrossPlatform(projectPath string, runCmd []string, out io.Writer, errOut io.Writer, cfg *config) error {
+	if cfg != nil && cfg.UseHerdr {
+		if launchWithHerdr(projectPath, runCmd, cfg.HerdrTarget) {
+			fmt.Fprintln(out, "   ↳ launched in herdr")
+			return nil
+		}
+	}
 	if cfg != nil && cfg.UseTmux {
 		if launchWithTmux(projectPath, runCmd, cfg.TmuxTarget) {
 			fmt.Fprintln(out, "   ↳ launched in tmux")

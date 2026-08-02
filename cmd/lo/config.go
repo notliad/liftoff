@@ -20,10 +20,12 @@ import (
 
 // config holds the persisted user configuration.
 type config struct {
-	Dirs       []string            `yaml:"dirs"`
-	Launchpads map[string][]string `yaml:"launchpads,omitempty"`
-	UseTmux    bool                `yaml:"use_tmux,omitempty"`
-	TmuxTarget string              `yaml:"tmux_target,omitempty"` // "tab" or "pane"
+	Dirs        []string            `yaml:"dirs"`
+	Launchpads  map[string][]string `yaml:"launchpads,omitempty"`
+	UseTmux     bool                `yaml:"use_tmux,omitempty"`
+	TmuxTarget  string              `yaml:"tmux_target,omitempty"` // "tab" or "pane"
+	UseHerdr    bool                `yaml:"use_herdr,omitempty"`
+	HerdrTarget string              `yaml:"herdr_target,omitempty"` // "tab" or "pane"
 }
 
 // legacyJSONConfig is used only for migrating old config.json files.
@@ -420,6 +422,8 @@ func runSettingsFlow(cfgPath, jsonMigratePath, legacyPath string, cfg *config, i
 			updated.Launchpads = cfg.Launchpads
 			updated.UseTmux = cfg.UseTmux
 			updated.TmuxTarget = cfg.TmuxTarget
+			updated.UseHerdr = cfg.UseHerdr
+			updated.HerdrTarget = cfg.HerdrTarget
 			*cfg = updated
 			if err := saveConfig(cfgPath, *cfg); err != nil {
 				return fmt.Errorf("❌ failed saving config: %w", err)
