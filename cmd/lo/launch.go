@@ -3,6 +3,7 @@ package main
 // Cross-platform project launching and command execution.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -120,15 +121,39 @@ func launchWithHerdr(projectPath string, runCmd []string, herdrTarget string) bo
 		return false
 	}
 
-	agentName := filepath.Base(projectPath)
-	args := []string{"agent", "start", agentName, "--cwd", projectPath}
-	if herdrTarget == "pane" {
-		args = append(args, "--split", "right")
+	if herdrTarget != "pane" {
+		return launchHerdrTab(projectPath, filepath.Base(projectPath), runCmd)
 	}
+
+	agentName := filepath.Base(projectPath)
+	args := []string{"agent", "start", agentName, "--cwd", projectPath, "--split", "right"}
 	args = append(args, "--")
 	args = append(args, runCmd...)
 
 	return exec.Command("herdr", args...).Start() == nil
+}
+
+// launchHerdrTab creates a real Herdr tab, then runs the command in its root pane.
+func launchHerdrTab(projectPath, label string, runCmd []string) bool {
+	createCmd := exec.Command("herdr", "tab", "create", "--cwd", projectPath, "--label", label, "--focus")
+	output, err := createCmd.Output()
+	if err != nil {
+		return false
+	}
+
+	var response struct {
+		Result struct {
+			RootPane struct {
+				PaneID string `json:"pane_id"`
+			} `json:"root_pane"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(output, &response); err != nil || response.Result.RootPane.PaneID == "" {
+		return false
+	}
+
+	command := shellJoin(runCmd)
+	return exec.Command("herdr", "pane", "run", response.Result.RootPane.PaneID, command).Start() == nil
 }
 
 // launchCrossPlatform opens a platform-appropriate terminal window to run the command.
