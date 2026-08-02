@@ -133,8 +133,22 @@ func launchWithHerdr(projectPath string, runCmd []string, herdrTarget string) bo
 
 // launchCrossPlatform opens a platform-appropriate terminal window to run the command.
 // Falls back to the current shell when no supported terminal is found.
-// If tmux/herdr is configured and available, it uses that instead.
-func launchCrossPlatform(projectPath string, runCmd []string, out io.Writer, errOut io.Writer, cfg *config) error {
+// GUI applications are started directly. Otherwise, if tmux/herdr is
+// configured and available, it uses that instead.
+func launchCrossPlatform(projectPath string, runCmd []string, gui bool, out io.Writer, errOut io.Writer, cfg *config) error {
+	if gui {
+		if len(runCmd) == 0 {
+			return errors.New("empty GUI command")
+		}
+		cmd := exec.Command(runCmd[0], runCmd[1:]...)
+		cmd.Dir = projectPath
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("❌ failed to launch GUI application: %w", err)
+		}
+		fmt.Fprintln(out, "   ↳ launched directly")
+		return nil
+	}
+
 	if cfg != nil && cfg.UseHerdr {
 		if launchWithHerdr(projectPath, runCmd, cfg.HerdrTarget) {
 			fmt.Fprintln(out, "   ↳ launched in herdr")
