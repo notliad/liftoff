@@ -336,9 +336,9 @@ func buildProjectStackMap(projects []projectEntry) map[string]string {
 	stackMap := make(map[string]string, len(projects))
 	for _, project := range projects {
 		if project.Variant == projectVariantStorybook {
-			stackMap[project.Display] = "📖 storybook"
+			stackMap[project.Display] = " storybook"
 		} else if project.Variant == projectVariantCompose {
-			stackMap[project.Display] = "🐳 docker compose"
+			stackMap[project.Display] = " docker compose"
 		} else {
 			stackMap[project.Display] = previewProjectStack(project.Path)
 		}
@@ -355,9 +355,9 @@ func listProjectsFlow(projects []projectEntry, out io.Writer) {
 	for _, project := range projects {
 		var stack string
 		if project.Variant == projectVariantStorybook {
-			stack = "📖 storybook"
+			stack = " storybook"
 		} else if project.Variant == projectVariantCompose {
-			stack = "🐳 docker compose"
+			stack = " docker compose"
 		} else {
 			stack = previewProjectStack(project.Path)
 			if strings.TrimSpace(stack) == "" {

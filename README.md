@@ -1,4 +1,4 @@
-<img width="1683" height="934" alt="liftoff" src="https://github.com/user-attachments/assets/bfb78c2d-7d02-4741-9833-9d2aed931292" />
+<img width="1672" height="941" alt="liftoff" src="https://github.com/user-attachments/assets/c221bb88-e258-4d0b-864f-a51b4d129fab" />
 <div align="center">
   
 [![GitHub Stars](https://img.shields.io/github/stars/notliad/liftoff?style=flat&color=FFD700&logo=github&logoColor=white)](https://github.com/notliad/liftoff/stargazers)
@@ -6,6 +6,8 @@
 [![GitHub License](https://img.shields.io/github/license/notliad/liftoff?style=flat&color=22c55e)](https://github.com/notliad/liftoff/blob/main/LICENSE)
 ![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Fnotliad%2Fliftoff&label=visitors&countColor=%230c7ebe&style=flat&labelStyle=none)
 ![release](https://img.shields.io/github/v/release/notliad/liftoff) ![Go](https://img.shields.io/badge/GO-00ADD8?style=flat&logo=go&logoColor=black)
+
+<a href='https://ko-fi.com/R6R11CIHFE' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
 </div>
 
@@ -18,13 +20,16 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 ## Features
 
 * Launch any project from your workspace with a single command
-* Zero-config runtime detection (Node, Rust, Python, Go, Java)
+* Zero-config runtime detection (Node, Rust, Python, Go, Java, Godot)
 * Automatic dependency installation
 * **Launchpads**: group multiple projects and start them together
 * **Watch Mode**: monitor your projects resources while its running
 * Cross-platform: Linux, macOS, Windows
 * Docker Compose support
 * **tmux** support: You can opt in for using tmux when launching your projects
+
+> **Note:** `lo` uses [Nerd Font](https://www.nerdfonts.com/) icons for runtime labels.
+> Install a Nerd Font (e.g. [JetBrains Mono](https://www.nerdfonts.com/font-downloads)) and set it in your terminal for the best visual experience.
 
 ## Installation
 
@@ -112,6 +117,13 @@ rm -rf ~/.config/lo
 * Runs with `go run .` or `go run ./cmd/<name>`
 * Framework hints:
   Gin, Fiber, Echo, Chi, Temporal
+
+### Godot
+
+* Detects `project.godot`
+* Opens the Godot editor
+* Framework hints:
+  Godot 3, Godot 4
 
 ### Docs & Static Sites
 

@@ -200,7 +200,7 @@ func launchProjectsWatchMode(launchpadName string, projects []projectEntry, in i
 
 	launched := 0
 	for _, project := range projects {
-		target, installCmd, runCmd, runDir, err := resolveProjectRunner(project, in, out)
+		target, installCmd, runCmd, runDir, _, err := resolveProjectRunner(project, in, out)
 		if err != nil {
 			fmt.Fprintf(errOut, "warning: %s: %v\n", project.Name, err)
 			continue

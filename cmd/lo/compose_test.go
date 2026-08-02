@@ -58,7 +58,7 @@ func TestListProjectsIncludesComposeVariants(t *testing.T) {
 	if _, ok := displays["infra (compose)"]; !ok {
 		t.Fatalf("expected compose-only infra entry, got %#v", displays)
 	}
-	if got := buildProjectStackMap(projects)["api (compose)"]; got != "🐳 docker compose" {
+	if got := buildProjectStackMap(projects)["api (compose)"]; got != " docker compose" {
 		t.Fatalf("unexpected compose stack preview: %q", got)
 	}
 }

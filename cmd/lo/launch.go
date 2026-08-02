@@ -17,8 +17,8 @@ import (
 // resolveProjectRunner returns the target label, optional install command, run command,
 // and working directory for the given project. in/out are forwarded for interactive
 // package-manager selection when no lockfile is present.
-func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, runDir string, err error) {
-	target, installCmd, runCmd, err = detectProjectRunner(project.Path, project.Variant, project.ScriptOverride, in, out)
+func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (target string, installCmd []string, runCmd []string, runDir string, gui bool, err error) {
+	target, installCmd, runCmd, gui, err = detectProjectRunner(project.Path, project.Variant, project.ScriptOverride, in, out)
 	runDir = project.Path
 	return
 }
@@ -26,7 +26,7 @@ func resolveProjectRunner(project projectEntry, in io.Reader, out io.Writer) (ta
 // launchProject installs dependencies (if needed), then starts the project
 // in a detached terminal or the current shell.
 func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Writer, errOut io.Writer, cfg *config) error {
-	target, installCmd, runCmd, runDir, err := resolveProjectRunner(project, in, out)
+	target, installCmd, runCmd, runDir, gui, err := resolveProjectRunner(project, in, out)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func launchProject(project projectEntry, watchMode bool, in io.Reader, out io.Wr
 	if watchMode {
 		return launchWithWatch(runDir, project.Name, runCmd, in, out, errOut, cfg)
 	}
-	if err := launchCrossPlatform(runDir, runCmd, out, errOut, cfg); err != nil {
+	if err := launchCrossPlatform(runDir, runCmd, gui, out, errOut, cfg); err != nil {
 		return err
 	}
 	return nil
