@@ -27,6 +27,7 @@ Instead of manually navigating folders, installing dependencies, and starting pr
 * Cross-platform: Linux, macOS, Windows
 * Docker Compose support
 * **tmux** support: You can opt in for using tmux when launching your projects
+* **herdr** support: Now you can launch your projects on herdr tabs or panes
 
 > **Note:** `lo` uses [Nerd Font](https://www.nerdfonts.com/) icons for runtime labels.
 > Install a Nerd Font (e.g. [JetBrains Mono](https://www.nerdfonts.com/font-downloads)) and set it in your terminal for the best visual experience.
