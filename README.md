@@ -11,7 +11,7 @@
 
 </div>
 
-**lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI designed to remove friction from your development workflow.
+**lo** (a.k.a. *Liftoff*) is a fast, cross-platform CLI/TUI designed to remove friction from your development workflow.
 
 Instead of manually navigating folders, installing dependencies, and starting projects one by one, **lo** lets you launch everything from a single command — instantly.
 
