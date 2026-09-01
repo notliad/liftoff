@@ -366,61 +366,79 @@
       color: var(--accent);
     }
 
-    /* Supported stack */
-    .stack-marquee {
-      overflow: hidden;
+    .mux-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+    }
+
+    .mux-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .75rem;
+      padding: 1.25rem 1rem;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: var(--surface);
-      mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+      font-size: 1rem;
+      color: var(--text);
     }
 
-    .stack-track {
+    .mux-item img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      padding: 4px;
+      border-radius: 6px;
+      background: #e1e7ed;
+    }
+
+    /* Stack categories */
+    .stack-categories {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .stack-category {
+      display: block;
+    }
+
+    .stack-category h3 {
+      font-size: .75rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: .65rem;
+    }
+
+    .stack-grid {
       display: flex;
-      align-items: center;
+      flex-wrap: wrap;
       gap: .75rem;
-      width: max-content;
-      padding: 1rem .75rem;
-      animation: stack-scroll 42s linear infinite;
-    }
-
-    .stack-marquee:hover .stack-track {
-      animation-play-state: paused;
     }
 
     .stack-item {
       display: inline-flex;
       align-items: center;
-      gap: .55rem;
-      min-width: max-content;
-      padding: .55rem .8rem;
+      gap: .6rem;
+      padding: .75rem 1rem;
       border: 1px solid var(--border);
-      border-radius: 7px;
-      background: #060a0f;
+      border-radius: 8px;
+      background: var(--surface);
       font-size: .8125rem;
       color: var(--text);
     }
 
     .stack-item img {
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       object-fit: contain;
-      padding: 3px;
-      border-radius: 5px;
+      padding: 4px;
+      border-radius: 3px;
       background: #e1e7ed;
-    }
-
-    @keyframes stack-scroll {
-      from { transform: translateX(0); }
-      to { transform: translateX(-50%); }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .stack-track {
-        animation: none;
-        flex-wrap: wrap;
-        width: auto;
-      }
     }
 
     /* Responsive */
@@ -450,9 +468,6 @@
         grid-column: 1;
       }
 
-      .stack-track {
-        animation-duration: 34s;
-      }
     }
 
     @media (max-width: 480px) {
@@ -469,6 +484,10 @@
       }
 
       .feature-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .stack-categories {
         grid-template-columns: 1fr;
       }
 
@@ -574,53 +593,86 @@
     <section>
       <div class="container">
         <div class="section-header">
+          <h2>Terminal Multiplexers</h2>
+          <p>Launch projects in tabs or panes with tmux and Herd support.</p>
+        </div>
+
+        <div class="mux-grid">
+          <div class="mux-item">
+            <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/tmux/tmux-original.svg" alt="" loading="lazy">
+            <span>tmux</span>
+          </div>
+          <div class="mux-item">
+            <img src="https://herdr.dev/assets/ram.svg" alt="" loading="lazy">
+            <span>Herd</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-header">
           <h2>Languages &amp; Frameworks</h2>
           <p>Supported stacks, detected automatically.</p>
         </div>
 
-        <div class="stack-marquee" aria-label="Supported languages and frameworks">
-          <div class="stack-track">
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" alt="" loading="lazy">Node.js</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-original.svg" alt="" loading="lazy">Rust</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original-wordmark.svg" alt="" loading="lazy">Go</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" alt="" loading="lazy">Python</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" alt="" loading="lazy">Java</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" loading="lazy">Next.js</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nuxtjs/nuxtjs-original.svg" alt="" loading="lazy">Nuxt</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/svelte/svelte-original.svg" alt="" loading="lazy">SvelteKit</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/astro/astro-original.svg" alt="" loading="lazy">Astro</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nestjs/nestjs-original.svg" alt="" loading="lazy">NestJS</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/remix/remix-original.svg" alt="" loading="lazy">Remix</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vitejs/vitejs-original.svg" alt="" loading="lazy">Vite</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" loading="lazy">React</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vuejs/vuejs-original.svg" alt="" loading="lazy">Vue</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/angularjs/angularjs-original.svg" alt="" loading="lazy">Angular</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/express/express-original.svg" alt="" loading="lazy">Express</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" alt="" loading="lazy">FastAPI</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg" alt="" loading="lazy">Flask</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/django/django-plain.svg" alt="" loading="lazy">Django</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original.svg" alt="" loading="lazy">Spring Boot</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/godot/godot-original.svg" alt="" loading="lazy">Godot</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" alt="" loading="lazy">Node.js</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-original.svg" alt="" loading="lazy">Rust</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original-wordmark.svg" alt="" loading="lazy">Go</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" alt="" loading="lazy">Python</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" alt="" loading="lazy">Java</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" loading="lazy">Next.js</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nuxtjs/nuxtjs-original.svg" alt="" loading="lazy">Nuxt</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/svelte/svelte-original.svg" alt="" loading="lazy">SvelteKit</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/astro/astro-original.svg" alt="" loading="lazy">Astro</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nestjs/nestjs-original.svg" alt="" loading="lazy">NestJS</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/remix/remix-original.svg" alt="" loading="lazy">Remix</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vitejs/vitejs-original.svg" alt="" loading="lazy">Vite</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" loading="lazy">React</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vuejs/vuejs-original.svg" alt="" loading="lazy">Vue</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/angularjs/angularjs-original.svg" alt="" loading="lazy">Angular</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/express/express-original.svg" alt="" loading="lazy">Express</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" alt="" loading="lazy">FastAPI</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg" alt="" loading="lazy">Flask</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/django/django-plain.svg" alt="" loading="lazy">Django</div>
-            <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original.svg" alt="" loading="lazy">Spring Boot</div>
+        <div class="stack-categories">
+          <div class="stack-category">
+            <h3>JavaScript / TypeScript</h3>
+            <div class="stack-grid">
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" alt="" loading="lazy">Node.js</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg" alt="" loading="lazy">Next.js</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nuxtjs/nuxtjs-original.svg" alt="" loading="lazy">Nuxt</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/svelte/svelte-original.svg" alt="" loading="lazy">SvelteKit</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/astro/astro-original.svg" alt="" loading="lazy">Astro</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nestjs/nestjs-original.svg" alt="" loading="lazy">NestJS</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/remix/remix-original.svg" alt="" loading="lazy">Remix</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vitejs/vitejs-original.svg" alt="" loading="lazy">Vite</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" alt="" loading="lazy">React</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vuejs/vuejs-original.svg" alt="" loading="lazy">Vue</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/angularjs/angularjs-original.svg" alt="" loading="lazy">Angular</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/express/express-original.svg" alt="" loading="lazy">Express</div>
+            </div>
+          </div>
+
+          <div class="stack-category">
+            <h3>Python</h3>
+            <div class="stack-grid">
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" alt="" loading="lazy">Python</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" alt="" loading="lazy">FastAPI</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg" alt="" loading="lazy">Flask</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/django/django-plain.svg" alt="" loading="lazy">Django</div>
+            </div>
+          </div>
+
+          <div class="stack-category">
+            <h3>Java</h3>
+            <div class="stack-grid">
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" alt="" loading="lazy">Java</div>
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original.svg" alt="" loading="lazy">Spring Boot</div>
+            </div>
+          </div>
+
+          <div class="stack-category">
+            <h3>Go</h3>
+            <div class="stack-grid">
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original-wordmark.svg" alt="" loading="lazy">Go</div>
+            </div>
+          </div>
+
+          <div class="stack-category">
+            <h3>Rust</h3>
+            <div class="stack-grid">
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-original.svg" alt="" loading="lazy">Rust</div>
+            </div>
+          </div>
+
+          <div class="stack-category">
+            <h3>Game Engines</h3>
+            <div class="stack-grid">
+              <div class="stack-item"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/godot/godot-original.svg" alt="" loading="lazy">Godot</div>
+            </div>
           </div>
         </div>
       </div>
